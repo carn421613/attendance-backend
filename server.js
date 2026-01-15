@@ -24,7 +24,13 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
-app.options("*", cors());   // ⭐ VERY IMPORTANT
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
+   // ⭐ VERY IMPORTANT
 
 app.use(express.json());
 
