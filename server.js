@@ -1,11 +1,16 @@
 require("dotenv").config();
 const admin = require("firebase-admin");
-
 const express = require("express");
 const cors = require("cors");
+const multer = require("multer");
+const cloudinary = require("./cloudinary");
+const upload = multer({ storage: multer.memoryStorage() });
 
-// 🔑 Firebase Admin Init
-console.log("THIS SERVER FILE IS RUNNING");
+
+/* =========================
+   FIREBASE ADMIN INIT
+========================= */
+console.log("SERVER STARTING...");
 
 admin.initializeApp({
   credential: admin.credential.cert(
@@ -13,161 +18,172 @@ admin.initializeApp({
   )
 });
 
-
 const db = admin.firestore();
-
 const app = express();
 
+
+/* =========================
+   MIDDLEWARE
+========================= */
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
+app.use(cors());
+// for JSON
+app.use(express.urlencoded({ extended: true })); // 🔥 for FormData
 
-app.use((req, res, next) => {
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
-  }
-  next();
-});
-   // ⭐ VERY IMPORTANT
 
 app.use(express.json());
 
+/* =========================
+   AUTH MIDDLEWARE (ADMIN)
+========================= */
+async function verifyAdmin(req, res, next) {
+  try {
+    const token = req.headers.authorization?.split("Bearer ")[1];
+    if (!token) {
+      return res.status(401).json({ error: "No token provided" });
+    }
 
-// ✅ Test API
+    const decoded = await admin.auth().verifyIdToken(token);
+
+    const userDoc = await db.collection("users").doc(decoded.uid).get();
+    if (!userDoc.exists || userDoc.data().role !== "admin") {
+      return res.status(403).json({ error: "Admin access required" });
+    }
+
+    req.user = decoded;
+    next();
+
+  } catch (err) {
+    return res.status(401).json({ error: "Invalid token" });
+  }
+}
+
+/* =========================
+   TEST ROUTE
+========================= */
 app.get("/", (req, res) => {
   res.send("Backend is running");
 });
 
-// ✅ Create enrollment request
-app.post("/enroll", async (req, res) => {
+/* =========================
+   ENROLLMENT REQUEST
+========================= */
+app.post("/enroll", upload.array("photos", 2), async (req, res) => {
   try {
-    const { uid,roll, course } = req.body;
+    console.log("ENROLL HIT");
+    console.log("BODY:", req.body);
+    console.log("FILES:", req.files);
 
-    if (!uid ||  !roll || !course) {
-      return res.status(400).json({ error: "Missing fields" });
-    }
-
-    await db.collection("enrollment_requests").add({
-      studentUid: uid,
-      roll,
-      course,
-      status: "pending",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    res.json({
+      message: "Reached enroll route",
+      body: req.body,
+      filesCount: req.files ? req.files.length : 0
     });
 
-    res.json({ message: "Enrollment request submitted" });
-
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    console.error("ENROLL ERROR:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 
-//  Create Student Account (Admin only)
-app.post("/create-student", async (req, res) => {
+
+
+/* =========================
+   CREATE STUDENT (ADMIN)
+========================= */
+app.post("/create-student", verifyAdmin, async (req, res) => {
   try {
     const { name, email } = req.body;
 
     if (!name || !email) {
-      return res.status(400).json({ error: "Name and email are required" });
+      return res.status(400).json({ error: "Name and email required" });
     }
 
-    // 1️⃣ Create Firebase Auth user
-    const userRecord = await admin.auth().createUser({
-      email: email,
-    });
+    const user = await admin.auth().createUser({ email });
 
-    // 2️⃣ Store in Firestore
-    await db.collection("users").doc(userRecord.uid).set({
+    await db.collection("users").doc(user.uid).set({
       name,
       email,
       role: "student",
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    // 3️⃣ Generate password reset link
     await admin.auth().generatePasswordResetLink(email);
 
-    res.status(200).json({
-      message: "Student created successfully"
-    });
+    res.json({ message: "Student created successfully" });
 
-  } catch (error) {
-    console.error("CREATE STUDENT ERROR:", error);
-
-    res.status(500).json({
-      error: error.message
-    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-
-
-// ✅ Create Lecturer Account (Admin only)
-app.post("/create-lecturer", async (req, res) => {
+/* =========================
+   CREATE LECTURER (ADMIN)
+========================= */
+app.post("/create-lecturer", verifyAdmin, async (req, res) => {
   try {
-    //console.log("CREATE LECTURER BODY:", req.body);
-
     const { name, email } = req.body;
 
     if (!name || !email) {
       return res.status(400).json({ error: "Missing fields" });
     }
 
-    const userRecord = await admin.auth().createUser({
-      email: email,
-    });
+    const user = await admin.auth().createUser({ email });
 
-    await db.collection("users").doc(userRecord.uid).set({
+    await db.collection("users").doc(user.uid).set({
       name,
       email,
       role: "lecturer",
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    const resetLink = await admin.auth()
-      .generatePasswordResetLink(email);
+    await admin.auth().generatePasswordResetLink(email);
 
-    //console.log("PASSWORD RESET LINK:", resetLink);
+    res.json({ message: "Lecturer created successfully" });
 
-    res.json({
-      message: "Lecturer created successfully"
-    });
-
-  } catch (error) {
-    console.error("CREATE LECTURER ERROR:", error);
-    console.error("ERROR CODE:", error.code);
-    console.error("ERROR MESSAGE:", error.message);
-
-    res.status(500).json({
-      error: error.message,
-      code: error.code
-    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
-
-app.get("/users", async (req, res) => {
+/* =========================
+   GET USERS (ADMIN)
+========================= */
+app.get("/users", verifyAdmin, async (req, res) => {
   const snapshot = await db.collection("users").get();
   const users = [];
-
   snapshot.forEach(doc => {
     users.push({ uid: doc.id, ...doc.data() });
   });
-
   res.json(users);
 });
 
-
-app.delete("/delete-user/:uid", async (req, res) => {
-  await admin.auth().deleteUser(req.params.uid);
-  await db.collection("users").doc(req.params.uid).delete();
-  res.json({ message: "User deleted successfully" });
+/* =========================
+   DELETE USER (ADMIN)
+========================= */
+app.delete("/delete-user/:uid", verifyAdmin, async (req, res) => {
+  try {
+    await admin.auth().deleteUser(req.params.uid);
+    await db.collection("users").doc(req.params.uid).delete();
+    res.json({ message: "User deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
-
+/* =========================
+   START SERVER
+========================= */
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Backend running on port ${PORT}`);
+});
+
+app.use((err, req, res, next) => {
+  console.error("GLOBAL ERROR:", err);
+  res.status(500).json({ error: "Internal Server Error" });
 });
