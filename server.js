@@ -91,18 +91,18 @@ app.post("/create-student", async (req, res) => {
 // ✅ Create Lecturer Account (Admin only)
 app.post("/create-lecturer", async (req, res) => {
   try {
-    const { name,  email } = req.body;
+    console.log("CREATE LECTURER BODY:", req.body);
 
-    if (!name ||  !email) {
+    const { name, email } = req.body;
+
+    if (!name || !email) {
       return res.status(400).json({ error: "Missing fields" });
     }
 
-    // 1️⃣ Create Firebase Auth user
     const userRecord = await admin.auth().createUser({
       email: email,
     });
 
-    // 2️⃣ Save lecturer details
     await db.collection("users").doc(userRecord.uid).set({
       name,
       email,
@@ -110,20 +110,27 @@ app.post("/create-lecturer", async (req, res) => {
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    // 3️⃣ Generate password setup link
     const resetLink = await admin.auth()
       .generatePasswordResetLink(email);
 
-    console.log("Lecturer password setup link:", resetLink);
+    console.log("PASSWORD RESET LINK:", resetLink);
 
     res.json({
-      message: "Lecturer created successfully. Password setup link generated."
+      message: "Lecturer created successfully"
     });
 
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("CREATE LECTURER ERROR:", error);
+    console.error("ERROR CODE:", error.code);
+    console.error("ERROR MESSAGE:", error.message);
+
+    res.status(500).json({
+      error: error.message,
+      code: error.code
+    });
   }
 });
+
 
 app.get("/users", async (req, res) => {
   const snapshot = await db.collection("users").get();
