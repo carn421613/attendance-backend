@@ -66,41 +66,42 @@ app.post("/enroll", async (req, res) => {
 
 //  Create Student Account (Admin only)
 app.post("/create-student", async (req, res) => {
-    console.log("CREATE-STUDENT ROUTE HIT");
   try {
     const { name, email } = req.body;
 
-    if (!name  || !email) {
-      return res.status(400).json({ error: "Missing fields" });
+    if (!name || !email) {
+      return res.status(400).json({ error: "Name and email are required" });
     }
 
-    // 1️⃣ Create Firebase Auth user (NO password)
+    // 1️⃣ Create Firebase Auth user
     const userRecord = await admin.auth().createUser({
       email: email,
     });
 
-    // 2️⃣ Save student details in Firestore
+    // 2️⃣ Store in Firestore
     await db.collection("users").doc(userRecord.uid).set({
-      name: name,
-      email: email,
+      name,
+      email,
       role: "student",
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    // 3️⃣ Generate password setup link
-    const resetLink = await admin.auth()
-      .generatePasswordResetLink(email);
+    // 3️⃣ Generate password reset link
+    await admin.auth().generatePasswordResetLink(email);
 
-    console.log("Student password setup link:", resetLink);
-
-    res.json({
-      message: "Student created successfully. Password setup link generated."
+    res.status(200).json({
+      message: "Student created successfully"
     });
 
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("CREATE STUDENT ERROR:", error);
+
+    res.status(500).json({
+      error: error.message
+    });
   }
 });
+
 
 
 // ✅ Create Lecturer Account (Admin only)
