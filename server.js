@@ -86,10 +86,9 @@ app.get("/", (req, res) => {
 ========================= */
 app.post("/enroll", upload.array("photos", 2), async (req, res) => {
   try {
-    // ✅ SAFELY READ FORM DATA
-    const uid = req.body?.uid;
-    const roll = req.body?.roll;
-    const course = req.body?.course;
+    console.log("ENROLL ROUTE HIT");
+
+    const { uid, roll, course } = req.body;
 
     if (!uid || !roll || !course) {
       return res.status(400).json({ error: "Missing fields" });
@@ -99,38 +98,38 @@ app.post("/enroll", upload.array("photos", 2), async (req, res) => {
       return res.status(400).json({ error: "At least 2 photos required" });
     }
 
-    // ✅ UPLOAD IMAGES TO CLOUDINARY
-    const imageUrls = [];
+    const uploadedPhotos = [];
 
     for (const file of req.files) {
-      const uploadResult = await cloudinary.uploader.upload(
-        `data:${file.mimetype};base64,${file.buffer.toString("base64")}`,
-        {
-          folder: "student_enrollments",
-        }
-      );
+      const base64Image = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
 
-      imageUrls.push(uploadResult.secure_url);
+      const result = await cloudinary.uploader.upload(base64Image, {
+        folder: "student_enrollments"
+      });
+
+      uploadedPhotos.push(result.secure_url);
     }
 
-    // ✅ SAVE ENROLLMENT REQUEST IN FIRESTORE
     await db.collection("enrollment_requests").add({
       studentUid: uid,
       roll,
       course,
-      images: imageUrls,
+      photos: uploadedPhotos,
       status: "pending",
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    // ✅ SUCCESS RESPONSE
-    res.json({ message: "Enrollment submitted successfully" });
+    res.json({
+      message: "Enrollment submitted successfully",
+      photos: uploadedPhotos
+    });
 
-  } catch (error) {
-    console.error("ENROLL ERROR:", error);
-    res.status(500).json({ error: "Enrollment failed" });
+  } catch (err) {
+    console.error("ENROLL ERROR:", err);
+    res.status(500).json({ error: err.message });
   }
-})
+});
+
 
 
 
