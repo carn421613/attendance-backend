@@ -4,7 +4,7 @@ const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
 const cloudinary = require("./cloudinary");
-const upload = multer({ storage: multer.memoryStorage() });
+
 
 
 /* =========================
@@ -25,17 +25,25 @@ const app = express();
 /* =========================
    MIDDLEWARE
 ========================= */
+const express = require("express");
+const cors = require("cors");
+const multer = require("multer");
+
+
+
+// ✅ CORS first
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
-app.use(cors());
-// for JSON
-app.use(express.urlencoded({ extended: true })); // 🔥 for FormData
 
+// ❌ DO NOT use express.json() for FormData routes
+// ❌ DO NOT use express.urlencoded() globally
 
-app.use(express.json());
+// ✅ Multer setup
+const upload = multer({ storage: multer.memoryStorage() });
+
 
 /* =========================
    AUTH MIDDLEWARE (ADMIN)
@@ -74,21 +82,52 @@ app.get("/", (req, res) => {
 ========================= */
 app.post("/enroll", upload.array("photos", 2), async (req, res) => {
   try {
-    console.log("ENROLL HIT");
-    console.log("BODY:", req.body);
-    console.log("FILES:", req.files);
+    // ✅ SAFELY READ FORM DATA
+    const uid = req.body?.uid;
+    const roll = req.body?.roll;
+    const course = req.body?.course;
 
-    res.json({
-      message: "Reached enroll route",
-      body: req.body,
-      filesCount: req.files ? req.files.length : 0
+    if (!uid || !roll || !course) {
+      return res.status(400).json({ error: "Missing fields" });
+    }
+
+    if (!req.files || req.files.length < 2) {
+      return res.status(400).json({ error: "At least 2 photos required" });
+    }
+
+    // ✅ UPLOAD IMAGES TO CLOUDINARY
+    const imageUrls = [];
+
+    for (const file of req.files) {
+      const uploadResult = await cloudinary.uploader.upload(
+        `data:${file.mimetype};base64,${file.buffer.toString("base64")}`,
+        {
+          folder: "student_enrollments",
+        }
+      );
+
+      imageUrls.push(uploadResult.secure_url);
+    }
+
+    // ✅ SAVE ENROLLMENT REQUEST IN FIRESTORE
+    await db.collection("enrollment_requests").add({
+      studentUid: uid,
+      roll,
+      course,
+      images: imageUrls,
+      status: "pending",
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-  } catch (err) {
-    console.error("ENROLL ERROR:", err);
-    res.status(500).json({ error: err.message });
+    // ✅ SUCCESS RESPONSE
+    res.json({ message: "Enrollment submitted successfully" });
+
+  } catch (error) {
+    console.error("ENROLL ERROR:", error);
+    res.status(500).json({ error: "Enrollment failed" });
   }
-});
+})
+
 
 
 
