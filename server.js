@@ -17,8 +17,18 @@ admin.initializeApp({
 const db = admin.firestore();
 
 const app = express();
-app.use(cors());
+const cors = require("cors");
+
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
+app.options("*", cors());   // ⭐ VERY IMPORTANT
+
 app.use(express.json());
+
 
 // ✅ Test API
 app.get("/", (req, res) => {
