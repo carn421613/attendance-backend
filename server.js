@@ -5,6 +5,11 @@ const cors = require("cors");
 const multer = require("multer");
 const cloudinary = require("./cloudinary");
 
+console.log("Cloudinary ENV CHECK", {
+  cloud: process.env.CLOUDINARY_CLOUD_NAME,
+  key: process.env.CLOUDINARY_API_KEY,
+  secretLength: process.env.CLOUDINARY_API_SECRET?.length
+});
 
 
 /* =========================
