@@ -3,7 +3,6 @@ const admin = require("firebase-admin");
 
 const express = require("express");
 const cors = require("cors");
-const admin = require("firebase-admin");
 
 // 🔑 Firebase Admin Init
 console.log("THIS SERVER FILE IS RUNNING");
@@ -145,7 +144,7 @@ app.delete("/delete-user/:uid", async (req, res) => {
 });
 
 
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Backend running on http://localhost:${PORT}`);
+  console.log(`Backend running on port ${PORT}`);
 });
