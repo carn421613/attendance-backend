@@ -91,7 +91,7 @@ app.post("/create-student", async (req, res) => {
 // ✅ Create Lecturer Account (Admin only)
 app.post("/create-lecturer", async (req, res) => {
   try {
-    console.log("CREATE LECTURER BODY:", req.body);
+    //console.log("CREATE LECTURER BODY:", req.body);
 
     const { name, email } = req.body;
 
@@ -113,7 +113,7 @@ app.post("/create-lecturer", async (req, res) => {
     const resetLink = await admin.auth()
       .generatePasswordResetLink(email);
 
-    console.log("PASSWORD RESET LINK:", resetLink);
+    //console.log("PASSWORD RESET LINK:", resetLink);
 
     res.json({
       message: "Lecturer created successfully"
