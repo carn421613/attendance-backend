@@ -26,29 +26,19 @@ admin.initializeApp({
 const db = admin.firestore();
 const app = express();
 
-
-/* =========================
-   MIDDLEWARE
-========================= */
-
-
-
-
-
-// ✅ CORS first
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
-// ❌ DO NOT use express.json() for FormData routes
-// ❌ DO NOT use express.urlencoded() globally
 
 // ✅ Multer setup
 const upload = multer({ storage: multer.memoryStorage() });
 
-
+app.use(cors());
+app.use(express.json());               // 🔥 REQUIRED for JSON
+app.use(express.urlencoded({ extended: true }));
 /* =========================
    AUTH MIDDLEWARE (ADMIN)
 ========================= */
