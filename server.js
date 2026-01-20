@@ -187,7 +187,8 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
   `${process.env.FACE_SERVICE_URL}/encode-student`,
   {
     uid: enrollment.studentUid,
-    photos: enrollment.photos
+    photos: enrollment.photos,
+    course: enrollment.course
   }
 );
 
