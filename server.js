@@ -221,7 +221,9 @@ app.post("/create-student", verifyAdmin, async (req, res) => {
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    await admin.auth().generatePasswordResetLink(email);
+    const link = await admin.auth().generatePasswordResetLink(email);
+    console.log("PASSWORD RESET LINK:", link);
+
     res.json({ message: "Student created successfully" });
 
   } catch (err) {
@@ -296,12 +298,12 @@ app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
       folder: "class_photos"
     });
 
-    await db.collection("class_photos").add({
+    const sessionRef = await db.collection("attendance_sessions").add({
       lecturerUid,
       year,
       semester,
-      course,
-      imageUrl: result.secure_url,
+      course: course.toLowerCase(),
+      classPhotoUrl: result.secure_url,
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
@@ -310,7 +312,8 @@ callFaceService(
   `${process.env.FACE_SERVICE_URL}/mark-attendance`,
   {
     groupPhoto: result.secure_url,
-    course
+    course,
+    sessionId
   }
 ).catch(() => {}); // don’t block lecturer upload
 
