@@ -51,13 +51,17 @@ console.log("Cloudinary ENV CHECK", {
 ========================= */
 console.log("SERVER STARTING...");
 
+const serviceAccount = JSON.parse(
+  Buffer.from(
+    process.env.FIREBASE_SERVICE_ACCOUNT_B64,
+    "base64"
+  ).toString("utf8")
+);
+
 admin.initializeApp({
-  credential: admin.credential.cert(
-    JSON.parse(
-      process.env.FIREBASE_SERVICE_ACCOUNT.replace(/\\n/g, "\n")
-    )
-  )
+  credential: admin.credential.cert(serviceAccount)
 });
+
 
 
 const db = admin.firestore();
