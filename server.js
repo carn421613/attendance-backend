@@ -179,19 +179,21 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
 
     const enrollment = snap.data();
 
-    // ✅ Update status
-    await ref.update({ status: "approved" });
-
-    // 🔥 CALL PYTHON SERVICE TO ENCODE FACE
+    // 🔥 TRY FACE ENCODING FIRST
     await callFaceService(
-  `${process.env.FACE_SERVICE_URL}/encode-student`,
-  {
-    uid: enrollment.studentUid,
-    photos: enrollment.photos,
-    course: enrollment.course
-  }
-);
+      `${process.env.FACE_SERVICE_URL}/encode-student`,
+      {
+        uid: enrollment.studentUid,
+        photos: enrollment.photos,
+        course: enrollment.course
+      }
+    );
 
+    // ✅ ONLY AFTER SUCCESS
+    await ref.update({
+      status: "approved",
+      encodingStatus: "success"
+    });
 
     res.json({
       message: "Enrollment approved and face encoded successfully"
@@ -199,9 +201,20 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
 
   } catch (err) {
     console.error("APPROVAL ERROR:", err);
-    res.status(500).json({ error: err.message });
+
+    // ❌ Encoding failed → do NOT approve
+    await db.collection("enrollment_requests")
+      .doc(req.params.id)
+      .update({
+        status: "encoding_failed"
+      });
+
+    res.status(500).json({
+      error: "Face encoding failed. Enrollment not approved."
+    });
   }
 });
+
 
 /* =========================
    CREATE STUDENT (ADMIN)
