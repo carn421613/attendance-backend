@@ -167,9 +167,9 @@ app.post("/enroll", upload.array("photos", 3), async (req, res) => {
    APPROVE ENROLLMENT (ADMIN)
 ========================= */
 app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
-  console.log("🔥 APPROVAL → CALLING ENCODE FOR:", enrollment.studentUid);
-
   try {
+    console.log("🔥 APPROVE ENROLLMENT ROUTE HIT:", req.params.id);
+
     const ref = db.collection("enrollment_requests").doc(req.params.id);
     const snap = await ref.get();
 
@@ -177,9 +177,12 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
       return res.status(404).json({ error: "Enrollment request not found" });
     }
 
+    // ✅ THIS LINE WAS MISSING
     const enrollment = snap.data();
 
-    // 🔥 TRY FACE ENCODING FIRST
+    console.log("🔥 APPROVAL → CALLING ENCODE FOR:", enrollment.studentUid);
+
+    // 🔥 CALL PYTHON SERVICE FIRST
     await callFaceService(
       `${process.env.FACE_SERVICE_URL}/encode-student`,
       {
@@ -189,7 +192,7 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
       }
     );
 
-    // ✅ ONLY AFTER SUCCESS
+    // ✅ APPROVE ONLY AFTER ENCODING SUCCESS
     await ref.update({
       status: "approved",
       encodingStatus: "success"
@@ -202,7 +205,7 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
   } catch (err) {
     console.error("APPROVAL ERROR:", err);
 
-    // ❌ Encoding failed → do NOT approve
+    // ❌ DO NOT APPROVE IF ENCODING FAILS
     await db.collection("enrollment_requests")
       .doc(req.params.id)
       .update({
