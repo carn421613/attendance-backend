@@ -9,6 +9,9 @@ const cloudinary = require("./cloudinary");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
+console.log("FACE_SERVICE_URL AT RUNTIME:", process.env.FACE_SERVICE_URL);
+
+
 async function callFaceService(url, payload) {
   try {
     const controller = new AbortController();
