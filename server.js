@@ -22,7 +22,7 @@ console.log("SERVER STARTING...");
 
 admin.initializeApp({
   credential: admin.credential.cert(
-    JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+    JSON.parse(process.env.FIREBASE_SERVICE_URL)
   )
 });
 
@@ -142,7 +142,7 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
     await ref.update({ status: "approved" });
 
     // 🔥 CALL PYTHON SERVICE TO ENCODE FACE
-    await fetch(`${process.env.FACE_SERVICE_ACCOUNT}/encode-student`, {
+    await fetch(`${process.env.FACE_SERVICE_URL}/encode-student`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -264,7 +264,7 @@ app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
     });
 
     // 🔥 CALL PYTHON SERVICE TO MARK ATTENDANCE
-fetch(`${process.env.FACE_SERVICE_ACCOUNT}/mark-attendance`, {
+fetch(`${process.env.FACE_SERVICE_URL}/mark-attendance`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
   body: JSON.stringify({
