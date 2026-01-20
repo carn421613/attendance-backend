@@ -124,6 +124,42 @@ app.post("/enroll", upload.array("photos", 3), async (req, res) => {
   }
 });
 
+/* =========================
+   APPROVE ENROLLMENT (ADMIN)
+========================= */
+app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
+  try {
+    const ref = db.collection("enrollment_requests").doc(req.params.id);
+    const snap = await ref.get();
+
+    if (!snap.exists) {
+      return res.status(404).json({ error: "Enrollment request not found" });
+    }
+
+    const enrollment = snap.data();
+
+    // ✅ Update status
+    await ref.update({ status: "approved" });
+
+    // 🔥 CALL PYTHON SERVICE TO ENCODE FACE
+    await fetch(`${process.env.FACE_SERVICE_ACCOUNT}/encode-student`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        uid: enrollment.studentUid,
+        photos: enrollment.photos
+      })
+    });
+
+    res.json({
+      message: "Enrollment approved and face encoded successfully"
+    });
+
+  } catch (err) {
+    console.error("APPROVAL ERROR:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 /* =========================
    CREATE STUDENT (ADMIN)
@@ -228,16 +264,17 @@ app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
     });
 
     // 🔥 CALL PYTHON SERVICE TO MARK ATTENDANCE
-    fetch("http://localhost:7000/mark-attendance", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        groupPhoto: result.secure_url,
-        course
-      })
-    }).catch(err =>
-      console.error("Attendance service error:", err)
-    );
+fetch(`${process.env.FACE_SERVICE_ACCOUNT}/mark-attendance`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    groupPhoto: result.secure_url,
+    course
+  })
+}).catch(err =>
+  console.error("Attendance service error:", err)
+);
+
 
     res.json({ message: "Class photo uploaded successfully" });
 
