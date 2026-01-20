@@ -22,7 +22,7 @@ console.log("SERVER STARTING...");
 
 admin.initializeApp({
   credential: admin.credential.cert(
-    JSON.parse(process.env.FIREBASE_SERVICE_URL)
+    JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
   )
 });
 
