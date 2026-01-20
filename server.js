@@ -14,33 +14,31 @@ console.log("FACE_SERVICE_URL AT RUNTIME:", process.env.FACE_SERVICE_URL);
 
 async function callFaceService(url, payload) {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000); // 15s
+    console.log("CALLING FACE SERVICE:", url);
+    console.log("PAYLOAD:", payload);
 
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: controller.signal
+      body: JSON.stringify(payload)
     });
 
-    clearTimeout(timeout);
-
     const text = await response.text();
-    console.log("FACE SERVICE URL:", url);
+
     console.log("FACE SERVICE STATUS:", response.status);
     console.log("FACE SERVICE BODY:", text);
 
     if (!response.ok) {
-      throw new Error(`Face service error: ${text}`);
+      throw new Error(text);
     }
 
     return text;
   } catch (err) {
-    console.error("FACE SERVICE CALL FAILED:", err.message);
+    console.error("FACE SERVICE CALL FAILED:", err);
     throw err;
   }
 }
+
 
 
 console.log("Cloudinary ENV CHECK", {
@@ -169,6 +167,8 @@ app.post("/enroll", upload.array("photos", 3), async (req, res) => {
    APPROVE ENROLLMENT (ADMIN)
 ========================= */
 app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
+  console.log("🔥 APPROVAL → CALLING ENCODE FOR:", enrollment.studentUid);
+
   try {
     const ref = db.collection("enrollment_requests").doc(req.params.id);
     const snap = await ref.get();
