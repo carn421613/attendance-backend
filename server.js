@@ -9,6 +9,37 @@ const cloudinary = require("./cloudinary");
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
 
+async function callFaceService(url, payload) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000); // 15s
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeout);
+
+    const text = await response.text();
+    console.log("FACE SERVICE URL:", url);
+    console.log("FACE SERVICE STATUS:", response.status);
+    console.log("FACE SERVICE BODY:", text);
+
+    if (!response.ok) {
+      throw new Error(`Face service error: ${text}`);
+    }
+
+    return text;
+  } catch (err) {
+    console.error("FACE SERVICE CALL FAILED:", err.message);
+    throw err;
+  }
+}
+
+
 console.log("Cloudinary ENV CHECK", {
   cloud: process.env.CLOUDINARY_CLOUD_NAME,
   key: process.env.CLOUDINARY_API_KEY,
@@ -22,9 +53,12 @@ console.log("SERVER STARTING...");
 
 admin.initializeApp({
   credential: admin.credential.cert(
-    JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+    JSON.parse(
+      process.env.FIREBASE_SERVICE_ACCOUNT.replace(/\\n/g, "\n")
+    )
   )
 });
+
 
 const db = admin.firestore();
 const app = express();
@@ -142,14 +176,14 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
     await ref.update({ status: "approved" });
 
     // 🔥 CALL PYTHON SERVICE TO ENCODE FACE
-    await fetch(`${process.env.FACE_SERVICE_URL}/encode-student`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        uid: enrollment.studentUid,
-        photos: enrollment.photos
-      })
-    });
+    await callFaceService(
+  `${process.env.FACE_SERVICE_URL}/encode-student`,
+  {
+    uid: enrollment.studentUid,
+    photos: enrollment.photos
+  }
+);
+
 
     res.json({
       message: "Enrollment approved and face encoded successfully"
@@ -264,16 +298,14 @@ app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
     });
 
     // 🔥 CALL PYTHON SERVICE TO MARK ATTENDANCE
-fetch(`${process.env.FACE_SERVICE_URL}/mark-attendance`, {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
+callFaceService(
+  `${process.env.FACE_SERVICE_URL}/mark-attendance`,
+  {
     groupPhoto: result.secure_url,
     course
-  })
-}).catch(err =>
-  console.error("Attendance service error:", err)
-);
+  }
+).catch(() => {}); // don’t block lecturer upload
+
 
 
     res.json({ message: "Class photo uploaded successfully" });
