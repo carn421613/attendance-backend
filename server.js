@@ -280,24 +280,26 @@ app.delete("/delete-user/:uid", verifyAdmin, async (req, res) => {
   }
 });
 
-/* =========================
-   CLASS PHOTO UPLOAD (LECTURER)
-========================= */
 app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
   try {
     const { lecturerUid, year, semester, course } = req.body;
-    if (!lecturerUid || !year || !semester || !course)
-      return res.status(400).json({ error: "Missing fields" });
 
-    if (!req.file)
+    if (!lecturerUid || !year || !semester || !course) {
+      return res.status(400).json({ error: "Missing fields" });
+    }
+
+    if (!req.file) {
       return res.status(400).json({ error: "Photo required" });
+    }
 
     const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
 
+    // Upload class photo
     const result = await cloudinary.uploader.upload(base64Image, {
       folder: "class_photos"
     });
 
+    // Create attendance session
     const sessionRef = await db.collection("attendance_sessions").add({
       lecturerUid,
       year,
@@ -307,25 +309,29 @@ app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    // 🔥 CALL PYTHON SERVICE TO MARK ATTENDANCE
-callFaceService(
-  `${process.env.FACE_SERVICE_URL}/mark-attendance`,
-  {
-    groupPhoto: result.secure_url,
-    course,
-    sessionId
-  }
-).catch(() => {}); // don’t block lecturer upload
+    const sessionId = sessionRef.id; // 🔥 REQUIRED
 
+    // Call Python service (non-blocking)
+    callFaceService(
+      `${process.env.FACE_SERVICE_URL}/mark-attendance`,
+      {
+        groupPhoto: result.secure_url,
+        course: course.toLowerCase(),
+        sessionId
+      }
+    ).catch(() => {});
 
-
-    res.json({ message: "Class photo uploaded successfully" });
+    res.json({
+      message: "Class photo uploaded successfully",
+      sessionId
+    });
 
   } catch (err) {
     console.error("UPLOAD CLASS PHOTO ERROR:", err);
     res.status(500).json({ error: "Upload failed" });
   }
 });
+
 
 /* =========================
    START SERVER
