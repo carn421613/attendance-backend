@@ -228,7 +228,7 @@ app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
     });
 
     // 🔥 CALL PYTHON SERVICE TO MARK ATTENDANCE
-    fetch("http://localhost:6000/mark-attendance", {
+    fetch("http://localhost:7000/mark-attendance", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
