@@ -5,12 +5,15 @@ const cors = require("cors");
 const multer = require("multer");
 const cloudinary = require("./cloudinary");
 
+// ✅ Node fetch (needed for Python service calls)
+const fetch = (...args) =>
+  import("node-fetch").then(({ default: fetch }) => fetch(...args));
+
 console.log("Cloudinary ENV CHECK", {
   cloud: process.env.CLOUDINARY_CLOUD_NAME,
   key: process.env.CLOUDINARY_API_KEY,
   secretLength: process.env.CLOUDINARY_API_SECRET?.length
 });
-
 
 /* =========================
    FIREBASE ADMIN INIT
@@ -32,22 +35,19 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
-
 // ✅ Multer setup
 const upload = multer({ storage: multer.memoryStorage() });
 
-app.use(cors());
-app.use(express.json());               // 🔥 REQUIRED for JSON
+app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
 /* =========================
    AUTH MIDDLEWARE (ADMIN)
 ========================= */
 async function verifyAdmin(req, res, next) {
   try {
     const token = req.headers.authorization?.split("Bearer ")[1];
-    if (!token) {
-      return res.status(401).json({ error: "No token provided" });
-    }
+    if (!token) return res.status(401).json({ error: "No token provided" });
 
     const decoded = await admin.auth().verifyIdToken(token);
 
@@ -58,7 +58,6 @@ async function verifyAdmin(req, res, next) {
 
     req.user = decoded;
     next();
-
   } catch (err) {
     return res.status(401).json({ error: "Invalid token" });
   }
@@ -72,11 +71,13 @@ app.get("/", (req, res) => {
 });
 
 /* =========================
-   ENROLLMENT REQUEST
+   ENROLLMENT REQUEST (STUDENT)
 ========================= */
-app.post("/enroll", upload.array("photos", 2), async (req, res) => {
+app.post("/enroll", upload.array("photos", 3), async (req, res) => {
   try {
     console.log("ENROLL ROUTE HIT");
+    console.log("BODY:", req.body);
+    console.log("FILES:", req.files?.length);
 
     const { uid, roll, course } = req.body;
 
@@ -91,12 +92,15 @@ app.post("/enroll", upload.array("photos", 2), async (req, res) => {
     const uploadedPhotos = [];
 
     for (const file of req.files) {
+      console.log("Uploading:", file.originalname);
+
       const base64Image = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
 
       const result = await cloudinary.uploader.upload(base64Image, {
         folder: "student_enrollments"
       });
 
+      console.log("Uploaded URL:", result.secure_url);
       uploadedPhotos.push(result.secure_url);
     }
 
@@ -115,13 +119,10 @@ app.post("/enroll", upload.array("photos", 2), async (req, res) => {
     });
 
   } catch (err) {
-    console.error("ENROLL ERROR:", err);
+    console.error("ENROLL ERROR FULL:", err);
     res.status(500).json({ error: err.message });
   }
 });
-
-
-
 
 
 /* =========================
@@ -130,10 +131,8 @@ app.post("/enroll", upload.array("photos", 2), async (req, res) => {
 app.post("/create-student", verifyAdmin, async (req, res) => {
   try {
     const { name, email } = req.body;
-
-    if (!name || !email) {
+    if (!name || !email)
       return res.status(400).json({ error: "Name and email required" });
-    }
 
     const user = await admin.auth().createUser({ email });
 
@@ -145,7 +144,6 @@ app.post("/create-student", verifyAdmin, async (req, res) => {
     });
 
     await admin.auth().generatePasswordResetLink(email);
-
     res.json({ message: "Student created successfully" });
 
   } catch (err) {
@@ -159,10 +157,8 @@ app.post("/create-student", verifyAdmin, async (req, res) => {
 app.post("/create-lecturer", verifyAdmin, async (req, res) => {
   try {
     const { name, email } = req.body;
-
-    if (!name || !email) {
+    if (!name || !email)
       return res.status(400).json({ error: "Missing fields" });
-    }
 
     const user = await admin.auth().createUser({ email });
 
@@ -174,7 +170,6 @@ app.post("/create-lecturer", verifyAdmin, async (req, res) => {
     });
 
     await admin.auth().generatePasswordResetLink(email);
-
     res.json({ message: "Lecturer created successfully" });
 
   } catch (err) {
@@ -188,9 +183,7 @@ app.post("/create-lecturer", verifyAdmin, async (req, res) => {
 app.get("/users", verifyAdmin, async (req, res) => {
   const snapshot = await db.collection("users").get();
   const users = [];
-  snapshot.forEach(doc => {
-    users.push({ uid: doc.id, ...doc.data() });
-  });
+  snapshot.forEach(doc => users.push({ uid: doc.id, ...doc.data() }));
   res.json(users);
 });
 
@@ -207,23 +200,17 @@ app.delete("/delete-user/:uid", verifyAdmin, async (req, res) => {
   }
 });
 
-
 /* =========================
-   CLASS PHOTO UPLOAD
+   CLASS PHOTO UPLOAD (LECTURER)
 ========================= */
-
-
 app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
   try {
     const { lecturerUid, year, semester, course } = req.body;
-
-    if (!lecturerUid || !year || !semester || !course) {
+    if (!lecturerUid || !year || !semester || !course)
       return res.status(400).json({ error: "Missing fields" });
-    }
 
-    if (!req.file) {
+    if (!req.file)
       return res.status(400).json({ error: "Photo required" });
-    }
 
     const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
 
@@ -240,6 +227,18 @@ app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
+    // 🔥 CALL PYTHON SERVICE TO MARK ATTENDANCE
+    fetch("http://localhost:6000/mark-attendance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        groupPhoto: result.secure_url,
+        course
+      })
+    }).catch(err =>
+      console.error("Attendance service error:", err)
+    );
+
     res.json({ message: "Class photo uploaded successfully" });
 
   } catch (err) {
@@ -254,9 +253,4 @@ app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Backend running on port ${PORT}`);
-});
-
-app.use((err, req, res, next) => {
-  console.error("GLOBAL ERROR:", err);
-  res.status(500).json({ error: "Internal Server Error" });
 });
