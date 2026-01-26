@@ -52,12 +52,20 @@ console.log("Cloudinary ENV CHECK", {
 ========================= */
 console.log("SERVER STARTING...");
 
-const serviceAccount = JSON.parse(
-  Buffer.from(
-    process.env.FIREBASE_SERVICE_ACCOUNT_B64,
-    "base64"
-  ).toString("utf8")
-);
+let serviceAccount;
+
+if (process.env.FIREBASE_SERVICE_ACCOUNT_B64) {
+  // Render
+  serviceAccount = JSON.parse(
+    Buffer.from(
+      process.env.FIREBASE_SERVICE_ACCOUNT_B64,
+      "base64"
+    ).toString("utf8")
+  );
+} else {
+  // Local
+  serviceAccount = require("./serviceAccountKey.json");
+}
 
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
@@ -420,7 +428,7 @@ app.get("/student/profile/:uid", async (req, res) => {
 /* =========================
    START SERVER
 ========================= */
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`Backend running on port ${PORT}`);
 });
