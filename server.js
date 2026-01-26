@@ -361,40 +361,38 @@ PROFILE MANAGING
 --------------------------------*/
 
 /* =========================
-   SAVE / UPDATE STUDENT PROFILE
+   UPDATE STUDENT PROFILE
 ========================= */
 app.post("/student/profile", async (req, res) => {
   try {
-    const { uid, year, semester, courses } = req.body;
+    const {
+      uid,
+      currentYear,
+      currentSemester,
+      courses
+    } = req.body;
 
-    if (!uid || !year || !semester || !Array.isArray(courses)) {
-      return res.status(400).json({ error: "Invalid profile data" });
-    }
-
-    // Basic validation
-    for (const c of courses) {
-      if (!c.name || typeof c.cgpa !== "number") {
-        return res.status(400).json({ error: "Invalid course format" });
-      }
+    if (!uid || !currentYear || !currentSemester) {
+      return res.status(400).json({ error: "Missing required fields" });
     }
 
     await db.collection("users").doc(uid).set(
       {
         profile: {
-          year,
-          semester,
+          currentYear,
+          currentSemester,
           courses,
           updatedAt: admin.firestore.FieldValue.serverTimestamp()
         }
       },
-      { merge: true } // 🔥 important: does not overwrite user data
+      { merge: true }
     );
 
-    res.json({ message: "Profile saved successfully" });
+    res.json({ message: "Profile updated successfully" });
 
   } catch (err) {
-    console.error("SAVE PROFILE ERROR:", err);
-    res.status(500).json({ error: "Failed to save profile" });
+    console.error("UPDATE PROFILE ERROR:", err);
+    res.status(500).json({ error: "Failed to update profile" });
   }
 });
 /* =========================
@@ -402,7 +400,9 @@ app.post("/student/profile", async (req, res) => {
 ========================= */
 app.get("/student/profile/:uid", async (req, res) => {
   try {
-    const doc = await db.collection("users").doc(req.params.uid).get();
+    const uid = req.params.uid;
+
+    const doc = await db.collection("users").doc(uid).get();
 
     if (!doc.exists) {
       return res.status(404).json({ error: "Student not found" });
@@ -411,9 +411,10 @@ app.get("/student/profile/:uid", async (req, res) => {
     const profile = doc.data().profile || {};
 
     res.json({
-      year: profile.year || "",
-      semester: profile.semester || "",
-      courses: profile.courses || []
+      currentYear: profile.currentYear || "",
+      currentSemester: profile.currentSemester || "",
+      courses: profile.courses || [],
+      updatedAt: profile.updatedAt || null
     });
 
   } catch (err) {
