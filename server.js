@@ -348,6 +348,74 @@ app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
   }
 });
 
+/*------------------------------
+PROFILE MANAGING
+--------------------------------*/
+
+/* =========================
+   SAVE / UPDATE STUDENT PROFILE
+========================= */
+app.post("/student/profile", async (req, res) => {
+  try {
+    const { uid, year, semester, courses } = req.body;
+
+    if (!uid || !year || !semester || !Array.isArray(courses)) {
+      return res.status(400).json({ error: "Invalid profile data" });
+    }
+
+    // Basic validation
+    for (const c of courses) {
+      if (!c.name || typeof c.cgpa !== "number") {
+        return res.status(400).json({ error: "Invalid course format" });
+      }
+    }
+
+    await db.collection("users").doc(uid).set(
+      {
+        profile: {
+          year,
+          semester,
+          courses,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }
+      },
+      { merge: true } // 🔥 important: does not overwrite user data
+    );
+
+    res.json({ message: "Profile saved successfully" });
+
+  } catch (err) {
+    console.error("SAVE PROFILE ERROR:", err);
+    res.status(500).json({ error: "Failed to save profile" });
+  }
+});
+/* =========================
+   GET STUDENT PROFILE
+========================= */
+app.get("/student/profile/:uid", async (req, res) => {
+  try {
+    const doc = await db.collection("users").doc(req.params.uid).get();
+
+    if (!doc.exists) {
+      return res.status(404).json({ error: "Student not found" });
+    }
+
+    const profile = doc.data().profile || {};
+
+    res.json({
+      year: profile.year || "",
+      semester: profile.semester || "",
+      courses: profile.courses || []
+    });
+
+  } catch (err) {
+    console.error("GET PROFILE ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch profile" });
+  }
+});
+
+
+
 
 /* =========================
    START SERVER
