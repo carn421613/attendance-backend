@@ -211,12 +211,7 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
         strictCgpa: 8.5,
         seatLimit: 80
       },
-      "machine learning": {
-        prerequisite: "probability",
-        minCgpa: 7.0,
-        strictCgpa: 8.0,
-        seatLimit: 80
-      },
+
       "advanced machine learning": {
         prerequisite: "machine learning",
         minCgpa: 7.5,
@@ -226,11 +221,13 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
     };
 
     const course = request.course.toLowerCase();
-    const rule = courseRules[course];
 
-    if (!rule) {
-      return res.json({ message: "No rules defined for this course" });
-    }
+    // ✅ DEFAULT RULE (for all other courses)
+    const rule = courseRules[course] || {
+      minCgpa: 7.0,
+      strictCgpa: 8.0,
+      seatLimit: 80
+    };
 
     /* ==========================
        PREREQUISITE CHECK
@@ -254,11 +251,11 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
     if (Number(student.cgpa) < rule.minCgpa) {
       await requestRef.update({
         status: "rejected",
-        reason: "CGPA below minimum requirement"
+        reason: `Minimum CGPA ${rule.minCgpa} required`
       });
 
       return res.json({
-        message: "Rejected — CGPA too low"
+        message: "Rejected — CGPA below requirement"
       });
     }
 
@@ -278,7 +275,7 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
     if (seatCount >= rule.seatLimit) {
 
       if (Number(student.cgpa) >= rule.strictCgpa) {
-        // approve
+
         await db.collection("enrollments").add({
           studentUid: request.studentUid,
           course,
@@ -295,7 +292,7 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
         });
 
       } else {
-        // waitlist
+
         await db.collection("waitlist").add({
           studentUid: request.studentUid,
           course,
