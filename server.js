@@ -359,58 +359,44 @@ app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
 /*------------------------------
 PROFILE MANAGING
 --------------------------------*/
-
-/* =========================
-   UPDATE STUDENT PROFILE
-========================= */
+/* ======================
+   SAVE STUDENT PROFILE
+====================== */
 app.post("/student/profile", async (req, res) => {
   try {
-    const { uid, currentYear, currentSemester, courses } = req.body;
+    const { uid, currentYear, currentSemester, semesters, cgpa } = req.body;
 
-    await db.collection("users").doc(uid).set(
-      {
-        currentYear,
-        currentSemester,
-        courses,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      },
-      { merge: true }
-    );
+    await db.collection("users").doc(uid).set({
+      currentYear,
+      currentSemester,
+      semesters,
+      cgpa,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    }, { merge: true });
 
-    res.json({ message: "Profile updated successfully" });
+    res.json({ message: "Academic profile updated successfully" });
 
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-/* =========================
+
+/* ======================
    GET STUDENT PROFILE
-========================= */
+====================== */
 app.get("/student/profile/:uid", async (req, res) => {
   try {
-    const uid = req.params.uid;
+    const doc = await db.collection("users").doc(req.params.uid).get();
 
-    const doc = await db.collection("users").doc(uid).get();
+    if (!doc.exists)
+      return res.status(404).json({ error: "Profile not found" });
 
-    if (!doc.exists) {
-      return res.status(404).json({ error: "Student not found" });
-    }
-
-    const profile = doc.data().profile || {};
-
-    res.json({
-      currentYear: profile.currentYear || "",
-      currentSemester: profile.currentSemester || "",
-      courses: profile.courses || [],
-      updatedAt: profile.updatedAt || null
-    });
+    res.json(doc.data());
 
   } catch (err) {
-    console.error("GET PROFILE ERROR:", err);
     res.status(500).json({ error: "Failed to fetch profile" });
   }
 });
-
 
 
 
