@@ -365,25 +365,14 @@ PROFILE MANAGING
 ========================= */
 app.post("/student/profile", async (req, res) => {
   try {
-    const {
-      uid,
-      currentYear,
-      currentSemester,
-      courses
-    } = req.body;
-
-    if (!uid || !currentYear || !currentSemester) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
+    const { uid, currentYear, currentSemester, courses } = req.body;
 
     await db.collection("users").doc(uid).set(
       {
-        profile: {
-          currentYear,
-          currentSemester,
-          courses,
-          updatedAt: admin.firestore.FieldValue.serverTimestamp()
-        }
+        currentYear,
+        currentSemester,
+        courses,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
       },
       { merge: true }
     );
@@ -391,8 +380,7 @@ app.post("/student/profile", async (req, res) => {
     res.json({ message: "Profile updated successfully" });
 
   } catch (err) {
-    console.error("UPDATE PROFILE ERROR:", err);
-    res.status(500).json({ error: "Failed to update profile" });
+    res.status(500).json({ error: err.message });
   }
 });
 /* =========================
