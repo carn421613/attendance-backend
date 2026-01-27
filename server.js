@@ -176,53 +176,164 @@ app.post("/enroll", upload.array("photos", 3), async (req, res) => {
 ========================= */
 app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
   try {
-    console.log("🔥 APPROVE ENROLLMENT ROUTE HIT:", req.params.id);
+    const requestRef =
+      db.collection("enrollment_requests").doc(req.params.id);
 
-    const ref = db.collection("enrollment_requests").doc(req.params.id);
-    const snap = await ref.get();
+    const requestSnap = await requestRef.get();
+    if (!requestSnap.exists)
+      return res.status(404).json({ error: "Request not found" });
 
-    if (!snap.exists) {
-      return res.status(404).json({ error: "Enrollment request not found" });
+    const request = requestSnap.data();
+
+    /* ==========================
+       FETCH STUDENT PROFILE
+    ========================== */
+    const studentSnap = await db
+      .collection("users")
+      .doc(request.studentUid)
+      .get();
+
+    if (!studentSnap.exists)
+      return res.status(404).json({ error: "Student not found" });
+
+    const student = studentSnap.data();
+
+    const completedSubjects =
+      (student.semesters || []).flatMap(s => s.subjects || []);
+
+    /* ==========================
+       COURSE RULES
+    ========================== */
+    const courseRules = {
+      "advanced data structures": {
+        prerequisite: "data structures",
+        minCgpa: 7.5,
+        strictCgpa: 8.5,
+        seatLimit: 80
+      },
+      "machine learning": {
+        prerequisite: "probability",
+        minCgpa: 7.0,
+        strictCgpa: 8.0,
+        seatLimit: 80
+      },
+      "advanced machine learning": {
+        prerequisite: "machine learning",
+        minCgpa: 7.5,
+        strictCgpa: 8.5,
+        seatLimit: 80
+      }
+    };
+
+    const course = request.course.toLowerCase();
+    const rule = courseRules[course];
+
+    if (!rule) {
+      return res.json({ message: "No rules defined for this course" });
     }
 
-    // ✅ THIS LINE WAS MISSING
-    const enrollment = snap.data();
+    /* ==========================
+       PREREQUISITE CHECK
+    ========================== */
+    if (rule.prerequisite &&
+        !completedSubjects.includes(rule.prerequisite)) {
 
-    console.log("🔥 APPROVAL → CALLING ENCODE FOR:", enrollment.studentUid);
+      await requestRef.update({
+        status: "rejected",
+        reason: "Prerequisite not completed"
+      });
 
-    // 🔥 CALL PYTHON SERVICE FIRST
-    await callFaceService(
-      `${process.env.FACE_SERVICE_URL}/encode-student`,
-      {
-        uid: enrollment.studentUid,
-        photos: enrollment.photos,
-        course: enrollment.course
+      return res.json({
+        message: "Rejected — prerequisite not completed"
+      });
+    }
+
+    /* ==========================
+       CGPA BASIC CHECK
+    ========================== */
+    if (Number(student.cgpa) < rule.minCgpa) {
+      await requestRef.update({
+        status: "rejected",
+        reason: "CGPA below minimum requirement"
+      });
+
+      return res.json({
+        message: "Rejected — CGPA too low"
+      });
+    }
+
+    /* ==========================
+       SEAT COUNT
+    ========================== */
+    const enrolledSnap = await db
+      .collection("enrollments")
+      .where("course", "==", course)
+      .get();
+
+    const seatCount = enrolledSnap.size;
+
+    /* ==========================
+       STRICT RULE (>80)
+    ========================== */
+    if (seatCount >= rule.seatLimit) {
+
+      if (Number(student.cgpa) >= rule.strictCgpa) {
+        // approve
+        await db.collection("enrollments").add({
+          studentUid: request.studentUid,
+          course,
+          cgpa: student.cgpa,
+          approvedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        await requestRef.update({
+          status: "approved"
+        });
+
+        return res.json({
+          message: "Approved under strict CGPA criteria"
+        });
+
+      } else {
+        // waitlist
+        await db.collection("waitlist").add({
+          studentUid: request.studentUid,
+          course,
+          cgpa: student.cgpa,
+          createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        await requestRef.update({
+          status: "waitlisted"
+        });
+
+        return res.json({
+          message: "Added to waitlist"
+        });
       }
-    );
+    }
 
-    // ✅ APPROVE ONLY AFTER ENCODING SUCCESS
-    await ref.update({
-      status: "approved",
-      encodingStatus: "success"
+    /* ==========================
+       NORMAL APPROVAL
+    ========================== */
+    await db.collection("enrollments").add({
+      studentUid: request.studentUid,
+      course,
+      cgpa: student.cgpa,
+      approvedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    await requestRef.update({
+      status: "approved"
     });
 
     res.json({
-      message: "Enrollment approved and face encoded successfully"
+      message: "Enrollment approved successfully"
     });
 
   } catch (err) {
-    console.error("APPROVAL ERROR:", err);
-
-    // ❌ DO NOT APPROVE IF ENCODING FAILS
-    await db.collection("enrollment_requests")
-      .doc(req.params.id)
-      .update({
-        status: "encoding_failed"
-      });
-
-    res.status(500).json({
-      error: "Face encoding failed. Enrollment not approved."
-    });
+    console.error("ENROLLMENT ERROR:", err);
+    res.status(500).json({ error: "Enrollment failed" });
   }
 });
 
@@ -364,19 +475,35 @@ PROFILE MANAGING
 ====================== */
 app.post("/student/profile", async (req, res) => {
   try {
-    const { uid, currentYear, currentSemester, semesters, cgpa } = req.body;
-
-    await db.collection("users").doc(uid).set({
+    const {
+      uid,
       currentYear,
       currentSemester,
       semesters,
-      cgpa,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp()
-    }, { merge: true });
+      cgpa
+    } = req.body;
 
-    res.json({ message: "Academic profile updated successfully" });
+    if (!uid) {
+      return res.status(400).json({ error: "UID required" });
+    }
+
+    await db.collection("users").doc(uid).set(
+      {
+        currentYear,
+        currentSemester,
+        semesters,
+        cgpa,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      },
+      { merge: true }
+    );
+
+    res.json({
+      message: "Student academic profile saved successfully"
+    });
 
   } catch (err) {
+    console.error("PROFILE SAVE ERROR:", err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -386,14 +513,18 @@ app.post("/student/profile", async (req, res) => {
 ====================== */
 app.get("/student/profile/:uid", async (req, res) => {
   try {
-    const doc = await db.collection("users").doc(req.params.uid).get();
+    const uid = req.params.uid;
 
-    if (!doc.exists)
+    const doc = await db.collection("users").doc(uid).get();
+
+    if (!doc.exists) {
       return res.status(404).json({ error: "Profile not found" });
+    }
 
     res.json(doc.data());
 
   } catch (err) {
+    console.error("PROFILE FETCH ERROR:", err);
     res.status(500).json({ error: "Failed to fetch profile" });
   }
 });
