@@ -159,55 +159,82 @@ app.get("/", (req, res) => {
    ENROLLMENT REQUEST (STUDENT)
 ========================= */
 
+/* =========================
+   ENROLLMENT REQUEST (STUDENT)
+========================= */
+
 app.post("/enroll", upload.array("photos", 3), async (req, res) => {
 
   try {
 
     console.log("ENROLL ROUTE HIT");
-    console.log("BODY:", req.body);
-    console.log("FILES:", req.files?.length);
 
-    const { uid, roll, course } = req.body;
+    const { uid, roll, courseId } = req.body;
 
-    if (!uid || !roll || !course) {
-      return res.status(400).json({ error: "Missing fields" });
+    if (!uid || !roll || !courseId) {
+      return res.status(400).json({
+        error: "Missing fields"
+      });
     }
 
     if (!req.files || req.files.length < 2) {
-      return res.status(400).json({ error: "At least 2 photos required" });
+      return res.status(400).json({
+        error: "At least 2 photos required"
+      });
     }
+
+    /* =========================
+       VALIDATE COURSE
+    ========================= */
+
+    const courseDoc =
+      await db.collection("courses").doc(courseId).get();
+
+    if (!courseDoc.exists) {
+
+      return res.status(400).json({
+        error: "Invalid course selected"
+      });
+
+    }
+
+    const courseName = courseDoc.data().name;
 
     /* =========================
        CHECK DUPLICATE ENROLLMENT
     ========================= */
 
-    const courseName = course.toLowerCase().trim();
-
-    // Check if already enrolled
     const existingEnrollment = await db
       .collection("enrollments")
       .where("studentUid", "==", uid)
-      .where("course", "==", courseName)
+      .where("courseId", "==", courseId)
       .get();
 
     if (!existingEnrollment.empty) {
+
       return res.status(400).json({
-        error: `You are already enrolled in ${course}.`
+        error: `You are already enrolled in ${courseName}.`
       });
+
     }
 
-    // Check if already requested
+    /* =========================
+       CHECK PENDING REQUEST
+    ========================= */
+
     const existingRequest = await db
       .collection("enrollment_requests")
       .where("studentUid", "==", uid)
-      .where("course", "==", courseName)
+      .where("courseId", "==", courseId)
       .where("status", "==", "pending")
       .get();
 
     if (!existingRequest.empty) {
+
       return res.status(400).json({
-        error: `You already have a pending request for ${course}.`
+        error: `You already have a pending request for ${courseName}.`
       });
+
     }
 
     /* =========================
@@ -218,18 +245,16 @@ app.post("/enroll", upload.array("photos", 3), async (req, res) => {
 
     for (const file of req.files) {
 
-      console.log("Uploading:", file.originalname);
-
       const base64Image =
         `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
 
-      const result = await cloudinary.uploader.upload(base64Image, {
-        folder: "student_enrollments"
-      });
-
-      console.log("Uploaded URL:", result.secure_url);
+      const result =
+        await cloudinary.uploader.upload(base64Image, {
+          folder: "student_enrollments"
+        });
 
       uploadedPhotos.push(result.secure_url);
+
     }
 
     /* =========================
@@ -240,7 +265,8 @@ app.post("/enroll", upload.array("photos", 3), async (req, res) => {
 
       studentUid: uid,
       roll,
-      course: courseName,
+      courseId,
+      courseName,
       photos: uploadedPhotos,
       status: "pending",
       createdAt: admin.firestore.FieldValue.serverTimestamp()
@@ -248,15 +274,14 @@ app.post("/enroll", upload.array("photos", 3), async (req, res) => {
     });
 
     res.json({
-      message: "Enrollment submitted successfully",
-      photos: uploadedPhotos
+      message: "Enrollment submitted successfully"
     });
 
   }
 
   catch (err) {
 
-    console.error("ENROLL ERROR FULL:", err);
+    console.error("ENROLL ERROR:", err);
 
     res.status(500).json({
       error: err.message
@@ -912,9 +937,12 @@ function sendReply(res, text) {
 
 function requireStudent(res, role) {
 
-  if (role !== "student") {
-    sendReply(res, "This feature is available only for students.");
+  if (!role || role.toLowerCase() !== "student") {
+
+    sendReply(res, "Only students can access this feature.");
+
     return false;
+
   }
 
   return true;
@@ -924,9 +952,12 @@ function requireStudent(res, role) {
 
 function requireLecturer(res, role) {
 
-  if (role !== "lecturer") {
+  if (!role || role.toLowerCase() !== "lecturer") {
+
     sendReply(res, "Only lecturers can access this feature.");
+
     return false;
+
   }
 
   return true;
@@ -1838,6 +1869,65 @@ Focus more on ${lowestCourse} to improve your attendance.`;
     }
 
 
+    /* =========================
+       LECTURER COURSES
+    ========================= */
+
+    if (intent === "Lecturer_Courses") {
+
+      console.log("Lecturer courses triggered");
+
+      if (!requireLecturer(res, role)) return;
+
+      try {
+
+        const snap = await db
+          .collection("lecturer_courses")
+          .where("lecturerUid", "==", uid)
+          .get();
+
+        if (snap.empty) {
+
+          return sendReply(res,
+            "You are not assigned to any courses yet."
+          );
+
+        }
+
+        let response = "📚 Your Assigned Courses\n\n";
+
+        snap.forEach(doc => {
+
+          const data = doc.data();
+
+          response += `• ${data.course}\n`;
+
+        });
+
+        return sendReply(res, response);
+
+      }
+
+      catch (error) {
+
+        console.error("Lecturer courses error:", error);
+
+        return sendReply(res,
+          "Sorry, I couldn't fetch your courses."
+        );
+
+      }
+
+    }
+
+
+
+
+
+
+
+
+
     return res.json({
       fulfillmentText: "Ask me about your attendance."
     });
@@ -1853,6 +1943,16 @@ Focus more on ${lowestCourse} to improve your attendance.`;
   }
 
 });
+
+
+
+
+
+
+
+
+
+
 
 
 /* =========================
