@@ -1140,13 +1140,12 @@ async function getAttendanceFromSessions(uid) {
   return { totalClasses, attended };
 
 }
-
-
-
-
-
+/* =========================
+   COURSE ALIASES
+========================= */
 
 const courseAliases = {
+
   "ai": "artificial intelligence",
   "artificialintelligence": "artificial intelligence",
   "artificial intelligence": "artificial intelligence",
@@ -1162,9 +1161,53 @@ const courseAliases = {
   "ds": "data structures",
   "datastructures": "data structures",
   "data structures": "data structures"
+
 };
+
+
 /* =========================
-   HELPER: SEND CLEAN RESPONSE
+   FIND COURSE ID FROM USER INPUT
+========================= */
+
+async function getCourseIdFromAlias(input) {
+
+  if (!input) return null;
+
+  let text = input.toLowerCase().trim();
+  const noSpace = text.replace(/\s+/g, "");
+
+  const fullName =
+    courseAliases[noSpace] ||
+    courseAliases[text] ||
+    text;
+
+  const snap = await db.collection("courses").get();
+
+  for (const doc of snap.docs) {
+
+    const data = doc.data();
+
+    const courseName =
+      (data.name || "")
+        .toLowerCase()
+        .replace(/\s+/g, "");
+
+    if (courseName === fullName.replace(/\s+/g, "")) {
+      return {
+        id: doc.id,
+        name: data.name
+      };
+    }
+
+  }
+
+  return null;
+
+}
+
+
+/* =========================
+   HELPER: SEND RESPONSE
 ========================= */
 
 function sendReply(res, text) {
@@ -1181,12 +1224,16 @@ function sendReply(res, text) {
 
 }
 
+
+/* =========================
+   ROLE CHECKERS
+========================= */
+
 function requireStudent(res, role) {
 
   if (!role || role.toLowerCase() !== "student") {
 
     sendReply(res, "Only students can access this feature.");
-
     return false;
 
   }
@@ -1194,14 +1241,12 @@ function requireStudent(res, role) {
   return true;
 
 }
-
 
 function requireLecturer(res, role) {
 
   if (!role || role.toLowerCase() !== "lecturer") {
 
     sendReply(res, "Only lecturers can access this feature.");
-
     return false;
 
   }
@@ -1209,36 +1254,37 @@ function requireLecturer(res, role) {
   return true;
 
 }
+
+
 /* =========================
-   DIALOGFLOW CHATBOT WEBHOOK
+   CHATBOT WEBHOOK
 ========================= */
-/* =========================
-   DIALOGFLOW CHATBOT WEBHOOK
-========================= */
-/* =========================
-   DIALOGFLOW CHATBOT WEBHOOK
-========================= */
+
 app.post("/chatbot", async (req, res) => {
 
   try {
 
     const intent = req.body.queryResult.intent.displayName;
+
     console.log("CHATBOT INTENT:", intent);
 
     let uid = null;
 
     try {
+
       const session = req.body.session;
+
       if (session) {
         uid = session.split("/").pop();
       }
-    } catch {}
+
+    } catch { }
 
     console.log("UID RECEIVED:", uid);
 
 
     /* =========================
-       GET USER ROLE
+       FETCH USER ROLE
     ========================= */
 
     let role = "student";
@@ -1251,7 +1297,7 @@ app.post("/chatbot", async (req, res) => {
         role = userDoc.data().role || "student";
       }
 
-    } catch {}
+    } catch { }
 
     console.log("USER ROLE:", role);
 
@@ -1280,61 +1326,62 @@ app.post("/chatbot", async (req, res) => {
 
       if (!requireStudent(res, role)) return;
 
-      const coursesSnap = await db
+      const snap = await db
         .collection("attendance_summary")
         .doc(uid)
         .collection("courses")
         .get();
 
-      if (coursesSnap.empty) {
+      if (snap.empty) {
         return sendReply(res, "No attendance records found yet.");
       }
 
-      let totalClasses = 0;
+      let total = 0;
       let attended = 0;
 
       let response = "📊 Attendance Report\n\n";
 
-      coursesSnap.forEach(doc => {
+      for (const doc of snap.docs) {
 
         const courseId = doc.id;
         const data = doc.data();
 
-        const courseTotal = data.totalClasses || 0;
-        const courseAttended = data.attended || 0;
+        const courseInfo = await db
+          .collection("courses")
+          .doc(courseId)
+          .get();
 
-        const missed = courseTotal - courseAttended;
+        const courseName =
+          courseInfo.data()?.name || courseId;
+
+        const t = data.totalClasses || 0;
+        const a = data.attended || 0;
+        const m = t - a;
 
         const percent =
-          courseTotal === 0
-            ? 0
-            : ((courseAttended / courseTotal) * 100).toFixed(1);
+          t === 0 ? 0 : ((a / t) * 100).toFixed(1);
 
-        totalClasses += courseTotal;
-        attended += courseAttended;
+        total += t;
+        attended += a;
 
         response +=
-          `${courseId}
-Total : ${courseTotal}
-Attended : ${courseAttended}
-Missed : ${missed}
-Attendance : ${percent}%\n\n`;
+          `${courseName}
+Total Classes : ${t}
+Attended      : ${a}
+Missed        : ${m}
+Attendance    : ${percent}%\n\n`;
 
-      });
+      }
 
       const overall =
-        totalClasses === 0
-          ? 0
-          : ((attended / totalClasses) * 100).toFixed(1);
+        total === 0 ? 0 : ((attended / total) * 100).toFixed(1);
 
-      response +=
-        `Overall Attendance : ${overall}%\n`;
+      response += `Overall Attendance : ${overall}%\n`;
 
-      if (overall < 75) {
+      if (overall < 75)
         response += "⚠️ Your attendance is below 75%";
-      } else {
+      else
         response += "✅ Your attendance is safe";
-      }
 
       return sendReply(res, response);
 
@@ -1353,53 +1400,51 @@ Attendance : ${percent}%\n\n`;
       const parameters = req.body.queryResult.parameters || {};
       const courseInput = parameters.course || "";
 
-      const courseId =
-        courseAliases[courseInput.toLowerCase()] || courseInput.toLowerCase();
+      const course = await getCourseIdFromAlias(courseInput);
 
-      const studentDoc = await db
+      if (!course)
+        return sendReply(res, "I couldn't recognize that course.");
+
+      const courseId = course.id;
+      const courseName = course.name;
+
+      const enrollmentSnap = await db
         .collection("enrollments")
         .doc(courseId)
         .collection("students")
         .doc(uid)
         .get();
 
-      if (!studentDoc.exists) {
-        return sendReply(res, `You are not enrolled in ${courseId}`);
-      }
+      if (!enrollmentSnap.exists)
+        return sendReply(res, `You are not enrolled in ${courseName}`);
 
-      const courseDoc = await db
+      const doc = await db
         .collection("attendance_summary")
         .doc(uid)
         .collection("courses")
         .doc(courseId)
         .get();
 
-      if (!courseDoc.exists) {
-        return sendReply(res,
-          "No attendance recorded for this course yet."
-        );
-      }
+      if (!doc.exists)
+        return sendReply(res, "No attendance records found yet.");
 
-      const data = courseDoc.data();
+      const data = doc.data();
 
       const total = data.totalClasses || 0;
       const attended = data.attended || 0;
       const missed = total - attended;
 
       const percent =
-        total === 0
-          ? 0
-          : ((attended / total) * 100).toFixed(1);
+        total === 0 ? 0 : ((attended / total) * 100).toFixed(1);
 
-      const text =
-        `📘 ${courseId}
+      return sendReply(res,
+        `📘 ${courseName}
 
 Total Classes : ${total}
-Attended : ${attended}
-Missed : ${missed}
-Attendance : ${percent}%`;
-
-      return sendReply(res, text);
+Attended      : ${attended}
+Missed        : ${missed}
+Attendance    : ${percent}%`
+      );
 
     }
 
@@ -1424,10 +1469,9 @@ Attendance : ${percent}%`;
 
       snap.forEach(doc => {
 
-        const data = doc.data();
-
-        total += data.totalClasses || 0;
-        attended += data.attended || 0;
+        const d = doc.data();
+        total += d.totalClasses || 0;
+        attended += d.attended || 0;
 
       });
 
@@ -1436,17 +1480,63 @@ Attendance : ${percent}%`;
 
       const percent = ((attended / total) * 100).toFixed(1);
 
-      if (percent < 75) {
-
+      if (percent < 75)
         return sendReply(res,
-          `⚠️ Warning\n\nCurrent Attendance : ${percent}%\nYou must attend upcoming classes`
-        );
+          `⚠️ Warning
+
+Current Attendance : ${percent}%
+
+You are below the required 75%.
+Attend upcoming classes.`);
+
+      return sendReply(res,
+        `✅ Attendance Safe
+Current Attendance : ${percent}%`);
+
+    }
+
+
+
+    /* =========================
+       MISSED CLASSES
+    ========================= */
+
+    if (intent === "missed_classes") {
+
+      if (!requireStudent(res, role)) return;
+
+      const snap = await db
+        .collection("attendance_summary")
+        .doc(uid)
+        .collection("courses")
+        .get();
+
+      let totalMissed = 0;
+      let response = "📊 Missed Classes Report\n\n";
+
+      for (const doc of snap.docs) {
+
+        const data = doc.data();
+
+        const courseId = doc.id;
+
+        const courseInfo =
+          await db.collection("courses").doc(courseId).get();
+
+        const name = courseInfo.data()?.name || courseId;
+
+        const missed =
+          (data.totalClasses || 0) - (data.attended || 0);
+
+        totalMissed += missed;
+
+        response += `${name} → ${missed} classes missed\n`;
 
       }
 
-      return sendReply(res,
-        `✅ Attendance Safe\nCurrent Attendance : ${percent}%`
-      );
+      response += `\nTotal Missed Classes : ${totalMissed}`;
+
+      return sendReply(res, response);
 
     }
 
@@ -1460,13 +1550,16 @@ Attendance : ${percent}%`;
 
       if (!requireStudent(res, role)) return;
 
-      const coursesSnap = await db.collection("courses").get();
+      const snap = await db
+        .collection("courses")
+        .get();
 
-      let courses = [];
+      let response = "📚 Your Enrolled Courses\n\n";
+      let found = false;
 
-      for (const courseDoc of coursesSnap.docs) {
+      for (const doc of snap.docs) {
 
-        const courseId = courseDoc.id;
+        const courseId = doc.id;
 
         const studentDoc = await db
           .collection("enrollments")
@@ -1476,21 +1569,64 @@ Attendance : ${percent}%`;
           .get();
 
         if (studentDoc.exists) {
-          courses.push(courseId);
+
+          found = true;
+          response += `• ${doc.data().name}\n`;
+
         }
 
       }
 
-      if (courses.length === 0)
-        return sendReply(res, "You are not enrolled in any courses.");
-
-      let response = "📚 Your Courses\n\n";
-
-      courses.forEach(c => {
-        response += `• ${c}\n`;
-      });
+      if (!found)
+        return sendReply(res,
+          "You are not enrolled in any courses.");
 
       return sendReply(res, response);
+
+    }
+
+
+
+    /* =========================
+       REMAINING BUNK
+    ========================= */
+
+    if (intent === "Remaining_Bunk") {
+
+      if (!requireStudent(res, role)) return;
+
+      const snap = await db
+        .collection("attendance_summary")
+        .doc(uid)
+        .collection("courses")
+        .get();
+
+      let total = 0;
+      let attended = 0;
+
+      snap.forEach(doc => {
+
+        const d = doc.data();
+        total += d.totalClasses || 0;
+        attended += d.attended || 0;
+
+      });
+
+      const minAttendance = 0.75;
+
+      const remaining =
+        Math.floor((attended / minAttendance) - total);
+
+      if (remaining <= 0)
+        return sendReply(res,
+          `⚠️ Attendance Limit Reached
+
+You cannot miss any more classes.`);
+
+      return sendReply(res,
+        `📌 Remaining Bunks
+
+You can miss ${remaining} more class(es).`);
 
     }
 
@@ -1511,20 +1647,310 @@ Attendance : ${percent}%`;
 
       if (snap.empty)
         return sendReply(res,
-          "You have not submitted any enrollment requests."
-        );
+          "You have not submitted any enrollment requests.");
 
       let response = "📄 Enrollment Status\n\n";
 
-      snap.forEach(doc => {
+      for (const doc of snap.docs) {
 
         const data = doc.data();
 
-        response += `${data.courseId} → ${data.status}\n`;
+        const courseInfo =
+          await db.collection("courses")
+            .doc(data.courseId).get();
 
-      });
+        const name =
+          courseInfo.data()?.name || data.courseId;
+
+        response += `${name} → ${data.status}\n`;
+
+      }
 
       return sendReply(res, response);
+
+    }
+
+
+    /* =========================
+   LOWEST / HIGHEST ATTENDANCE
+========================= */
+
+    if (intent === "lowest_highest_attendance") {
+
+      console.log("lowest_highest_attendance intent triggered");
+      if (!requireStudent(res, role)) return;
+
+      try {
+
+        const userQuery = req.body.queryResult.queryText.toLowerCase();
+
+        const coursesSnap = await db
+          .collection("attendance_summary")
+          .doc(uid)
+          .collection("courses")
+          .get();
+
+        if (coursesSnap.empty) {
+          return sendReply(res, "No attendance records found yet.");
+        }
+
+        let lowestCourse = null;
+        let highestCourse = null;
+
+        let lowestPercent = 100;
+        let highestPercent = 0;
+
+        for (const doc of coursesSnap.docs) {
+
+          const courseId = doc.id;
+          const data = doc.data();
+
+          const total = data.totalClasses || 0;
+          const attended = data.attended || 0;
+
+          if (total === 0) continue;
+
+          const percent = (attended / total) * 100;
+
+          const courseInfo =
+            await db.collection("courses").doc(courseId).get();
+
+          const courseName =
+            courseInfo.data()?.name || courseId;
+
+          if (percent < lowestPercent) {
+
+            lowestPercent = percent;
+            lowestCourse = courseName;
+
+          }
+
+          if (percent > highestPercent) {
+
+            highestPercent = percent;
+            highestCourse = courseName;
+
+          }
+
+        }
+
+        if (userQuery.includes("lowest")) {
+
+          return sendReply(res,
+            `📉 Lowest Attendance
+
+Course : ${lowestCourse}
+Attendance : ${lowestPercent.toFixed(1)}%`);
+
+        }
+
+        if (userQuery.includes("highest")) {
+
+          return sendReply(res,
+            `📈 Highest Attendance
+
+Course : ${highestCourse}
+Attendance : ${highestPercent.toFixed(1)}%`);
+
+        }
+
+        return sendReply(res,
+          `📊 Attendance Analysis
+
+Lowest Attendance : ${lowestCourse} (${lowestPercent.toFixed(1)}%)
+Highest Attendance : ${highestCourse} (${highestPercent.toFixed(1)}%)`);
+
+      }
+
+      catch (error) {
+
+        console.error("Attendance analysis error:", error);
+
+        return sendReply(res, "Sorry, I couldn't analyze your attendance.");
+
+      }
+
+    }
+
+    /* =========================
+       ATTENDANCE PREDICTION
+    ========================= */
+
+    if (intent === "Attendance_Prediction") {
+
+      console.log("Attendance_Prediction intent triggered");
+      if (!requireStudent(res, role)) return;
+
+      try {
+
+        const parameters = req.body.queryResult.parameters || {};
+        const futureMissed = parameters.number || 0;
+
+        const coursesSnap = await db
+          .collection("attendance_summary")
+          .doc(uid)
+          .collection("courses")
+          .get();
+
+        if (coursesSnap.empty) {
+          return sendReply(res, "No attendance records found yet.");
+        }
+
+        let totalClasses = 0;
+        let attended = 0;
+
+        coursesSnap.forEach(doc => {
+
+          const data = doc.data();
+
+          totalClasses += data.totalClasses || 0;
+          attended += data.attended || 0;
+
+        });
+
+        if (totalClasses === 0) {
+          return sendReply(res, "No classes recorded yet.");
+        }
+
+        const newTotal = totalClasses + futureMissed;
+
+        const newPercent = ((attended / newTotal) * 100).toFixed(1);
+
+        let responseText =
+          `📊 Attendance Prediction
+
+Current Attendance : ${((attended / totalClasses) * 100).toFixed(1)}%
+
+If you miss ${futureMissed} upcoming classes:
+
+New Attendance : ${newPercent}%`;
+
+        if (newPercent < 75) {
+
+          responseText +=
+            `
+
+⚠️ This will drop your attendance below 75%.`;
+
+        } else {
+
+          responseText +=
+            `
+
+✅ Your attendance will remain above 75%.`;
+
+        }
+
+        return sendReply(res, responseText);
+
+      }
+
+      catch (error) {
+
+        console.error("Attendance prediction error:", error);
+
+        return sendReply(res, "Sorry, I couldn't calculate the prediction.");
+
+      }
+
+    }
+
+    /* =========================
+       SMART ATTENDANCE ADVISOR
+    ========================= */
+
+    if (intent === "Smart_Attendance_Advisor") {
+
+      console.log("Smart_Attendance_Advisor intent triggered");
+      if (!requireStudent(res, role)) return;
+
+      try {
+
+        const coursesSnap = await db
+          .collection("attendance_summary")
+          .doc(uid)
+          .collection("courses")
+          .get();
+
+        if (coursesSnap.empty) {
+          return sendReply(res, "No attendance records found yet.");
+        }
+
+        let totalClasses = 0;
+        let attended = 0;
+
+        coursesSnap.forEach(doc => {
+
+          const data = doc.data();
+
+          totalClasses += data.totalClasses || 0;
+          attended += data.attended || 0;
+
+        });
+
+        if (totalClasses === 0) {
+          return sendReply(res, "No classes recorded yet.");
+        }
+
+        const percent = ((attended / totalClasses) * 100).toFixed(1);
+
+        const requiredAttendance = 0.75;
+
+        let advice = "";
+
+        if (percent < 75) {
+
+          const classesNeeded =
+            Math.ceil((requiredAttendance * totalClasses - attended) / (1 - requiredAttendance));
+
+          advice =
+            `⚠️ Attendance Alert
+
+Current Attendance : ${percent}%
+
+You must attend the next ${classesNeeded} classes continuously
+to reach the required 75% attendance.`;
+
+        } else {
+
+          const remaining =
+            Math.floor((attended / requiredAttendance) - totalClasses);
+
+          advice =
+            `✅ Attendance Status : Safe
+
+Current Attendance : ${percent}%
+
+You can miss ${remaining} more class(es)
+without dropping below 75%.`;
+
+        }
+
+        return sendReply(res, advice);
+
+      }
+
+      catch (error) {
+
+        console.error("Smart advisor error:", error);
+
+        return sendReply(res, "Sorry, I couldn't generate attendance advice.");
+
+      }
+
+    }
+
+    /* =========================
+       AI FALLBACK
+    ========================= */
+
+    if (intent === "Default Fallback Intent") {
+
+      const userMessage = req.body.queryResult.queryText;
+
+      const aiReply = await askAI(userMessage);
+
+      return sendReply(res, aiReply);
 
     }
 
@@ -1545,42 +1971,30 @@ Attendance : ${percent}%`;
 
       if (snap.empty)
         return sendReply(res,
-          "You are not assigned to any courses."
-        );
+          "You are not assigned to any courses.");
 
       let response = "📚 Your Assigned Courses\n\n";
 
-      snap.forEach(doc => {
+      for (const doc of snap.docs) {
 
         const data = doc.data();
 
+        const courseInfo =
+          await db.collection("courses")
+            .doc(data.courseId).get();
+
+        const name =
+          courseInfo.data()?.name || data.courseId;
+
         response +=
-          `${data.courseId}
+          `${name}
 Branch : ${data.branch}
 Year : ${data.year}
 Semester : ${data.semester}\n\n`;
 
-      });
+      }
 
       return sendReply(res, response);
-
-    }
-
-
-
-    /* =========================
-       AI FALLBACK
-    ========================= */
-
-    if (intent === "Default Fallback Intent") {
-
-      console.log("AI fallback triggered");
-
-      const userMessage = req.body.queryResult.queryText;
-
-      const aiReply = await askAI(userMessage);
-
-      return sendReply(res, aiReply);
 
     }
 
@@ -1607,19 +2021,18 @@ Semester : ${data.semester}\n\n`;
 });
 
 
-
-
-
-
-
-
-
-
-
 /* =========================
    START SERVER
 ========================= */
+
 const PORT = process.env.PORT || 10000;
+
 app.listen(PORT, () => {
   console.log(`Backend running on port ${PORT}`);
 });
+
+
+
+
+
+
