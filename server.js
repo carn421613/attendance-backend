@@ -432,57 +432,145 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
 /* =========================
    CREATE STUDENT (ADMIN)
 ========================= */
-app.post("/create-student", verifyAdmin, async (req, res) => {
-  try {
-    const { name, email } = req.body;
-    if (!name || !email)
-      return res.status(400).json({ error: "Name and email required" });
 
-    const user = await admin.auth().createUser({ email });
+app.post("/create-student", verifyAdmin, async (req, res) => {
+
+  try {
+
+    const { name, email } = req.body;
+
+    if (!name || !email) {
+      return res.status(400).json({
+        error: "Name and email required"
+      });
+    }
+
+    /* CHECK IF EMAIL ALREADY EXISTS */
+
+    try {
+
+      await admin.auth().getUserByEmail(email);
+
+      return res.status(400).json({
+        error: "Student already exists with this email"
+      });
+
+    }
+
+    catch (err) {
+
+      if (err.code !== "auth/user-not-found") {
+        throw err;
+      }
+
+    }
+
+    /* CREATE USER */
+
+    const user = await admin.auth().createUser({
+      email
+    });
 
     await db.collection("users").doc(user.uid).set({
+
       name,
       email,
       role: "student",
       createdAt: admin.firestore.FieldValue.serverTimestamp()
+
     });
 
     const link = await admin.auth().generatePasswordResetLink(email);
+
     console.log("PASSWORD RESET LINK:", link);
 
-    res.json({ message: "Student created successfully" });
+    res.json({
+      message: "Student created successfully"
+    });
 
-  } catch (err) {
-    res.status(500).json({ error: err.message });
   }
-});
 
+  catch (err) {
+
+    console.error("CREATE STUDENT ERROR:", err);
+
+    res.status(500).json({
+      error: err.message
+    });
+
+  }
+
+});
 /* =========================
    CREATE LECTURER (ADMIN)
 ========================= */
-app.post("/create-lecturer", verifyAdmin, async (req, res) => {
-  try {
-    const { name, email } = req.body;
-    if (!name || !email)
-      return res.status(400).json({ error: "Missing fields" });
 
-    const user = await admin.auth().createUser({ email });
+app.post("/create-lecturer", verifyAdmin, async (req, res) => {
+
+  try {
+
+    const { name, email } = req.body;
+
+    if (!name || !email) {
+      return res.status(400).json({
+        error: "Missing fields"
+      });
+    }
+
+    /* CHECK IF EMAIL ALREADY EXISTS */
+
+    try {
+
+      await admin.auth().getUserByEmail(email);
+
+      return res.status(400).json({
+        error: "Lecturer already exists with this email"
+      });
+
+    }
+
+    catch (err) {
+
+      if (err.code !== "auth/user-not-found") {
+        throw err;
+      }
+
+    }
+
+    /* CREATE USER */
+
+    const user = await admin.auth().createUser({
+      email
+    });
 
     await db.collection("users").doc(user.uid).set({
+
       name,
       email,
       role: "lecturer",
       createdAt: admin.firestore.FieldValue.serverTimestamp()
+
     });
 
     await admin.auth().generatePasswordResetLink(email);
-    res.json({ message: "Lecturer created successfully" });
 
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.json({
+      message: "Lecturer created successfully"
+    });
+
   }
-});
 
+  catch (err) {
+
+    console.error("CREATE LECTURER ERROR:", err);
+
+    res.status(500).json({
+      error: err.message
+    });
+
+  }
+
+});
 /* =========================
    GET USERS (ADMIN)
 ========================= */
