@@ -155,9 +155,6 @@ app.get("/", (req, res) => {
 });
 
 
-/* =========================
-   ENROLLMENT REQUEST (STUDENT)
-========================= */
 
 /* =========================
    ENROLLMENT REQUEST (STUDENT)
@@ -935,30 +932,62 @@ app.post("/assign-lecturer-course", verifyAdmin, async (req, res) => {
 
   try {
 
-    const { lecturerUid, course } = req.body;
+    const { lecturerUid, courseId, branch, year, semester, academicYear } = req.body;
 
-    if (!lecturerUid || !course) {
+    if (!lecturerUid || !courseId || !branch || !year || !semester || !academicYear) {
       return res.status(400).json({
         error: "Missing fields"
       });
     }
 
+    const courseSnap = await db.collection("courses").doc(courseId).get();
+
+    if (!courseSnap.exists) {
+      return res.status(404).json({ error: "Course not found" });
+    }
+
+    const courseName = courseSnap.data().name;
+
+    const lecturerSnap = await db.collection("users").doc(lecturerUid).get();
+
+    if (!lecturerSnap.exists) {
+      return res.status(404).json({ error: "Lecturer not found" });
+    }
+
+    const lecturerName = lecturerSnap.data().name;
+
+    /* CHECK DUPLICATE ASSIGNMENT */
+
     const existing = await db
-      .collection("lecturer_courses")
+      .collection("lecturer_assignments")
       .where("lecturerUid", "==", lecturerUid)
-      .where("course", "==", course)
+      .where("courseId", "==", courseId)
+      .where("branch", "==", branch)
+      .where("year", "==", year)
+      .where("semester", "==", semester)
+      .where("academicYear", "==", academicYear)
       .get();
 
     if (!existing.empty) {
       return res.status(400).json({
-        error: "Lecturer already assigned to this course"
+        error: "Lecturer already assigned to this class"
       });
     }
 
-    await db.collection("lecturer_courses").add({
+    await db.collection("lecturer_assignments").add({
+
       lecturerUid,
-      course,
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
+      lecturerName,
+      courseId,
+      courseName,
+      branch,
+      year,
+      semester,
+      academicYear,
+
+      createdAt:
+        admin.firestore.FieldValue.serverTimestamp()
+
     });
 
     res.json({
@@ -969,7 +998,7 @@ app.post("/assign-lecturer-course", verifyAdmin, async (req, res) => {
 
   catch (err) {
 
-    console.error(err);
+    console.error("ASSIGN COURSE ERROR:", err);
 
     res.status(500).json({
       error: err.message
@@ -985,10 +1014,18 @@ PROFILE MANAGING
 /* ======================
    SAVE STUDENT PROFILE
 ====================== */
+/* ======================
+   SAVE STUDENT PROFILE
+====================== */
+
 app.post("/student/profile", async (req, res) => {
+
   try {
+
     const {
       uid,
+      branch,
+      academicYear,
       currentYear,
       currentSemester,
       semesters,
@@ -996,30 +1033,44 @@ app.post("/student/profile", async (req, res) => {
     } = req.body;
 
     if (!uid) {
-      return res.status(400).json({ error: "UID required" });
+      return res.status(400).json({
+        error: "UID required"
+      });
     }
 
-    await db.collection("users").doc(uid).set(
-      {
-        currentYear,
-        currentSemester,
-        semesters,
-        cgpa,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      },
-      { merge: true }
-    );
+    await db.collection("users").doc(uid).set({
+
+      branch,
+      academicYear,
+
+      currentYear,
+      currentSemester,
+
+      semesters,
+      cgpa,
+
+      updatedAt:
+        admin.firestore.FieldValue.serverTimestamp()
+
+    }, { merge: true });
 
     res.json({
       message: "Student academic profile saved successfully"
     });
 
-  } catch (err) {
-    console.error("PROFILE SAVE ERROR:", err);
-    res.status(500).json({ error: err.message });
   }
-});
 
+  catch (err) {
+
+    console.error("PROFILE SAVE ERROR:", err);
+
+    res.status(500).json({
+      error: err.message
+    });
+
+  }
+
+});
 /* ======================
    GET STUDENT PROFILE
 ====================== */
