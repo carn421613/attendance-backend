@@ -289,7 +289,7 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
 
     const request = requestSnap.data();
 
-    const { courseId, courseName, studentUid } = request;
+    const { courseId, courseName, studentUid, roll} = request;
 
     /* FETCH STUDENT */
 
@@ -406,7 +406,7 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
       .set({
 
         studentUid,
-        roll: student.roll,
+        roll,
         enrolledAt:
           admin.firestore.FieldValue.serverTimestamp()
 
