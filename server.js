@@ -1497,7 +1497,260 @@ app.post("/chatbot", async (req, res) => {
       return sendReplies(res, messages);
     }
 
+   /* =========================
+   LOWEST / HIGHEST ATTENDANCE
+========================= */
 
+if (intent === "lowest_highest_attendance") {
+
+  console.log("lowest_highest_attendance intent triggered");
+
+  if (!requireStudent(res, role)) return;
+
+  try {
+
+    const userQuery = req.body.queryResult.queryText.toLowerCase();
+
+    const coursesSnap = await db
+      .collection("attendance_summary")
+      .doc(uid)
+      .collection("courses")
+      .get();
+
+    if (coursesSnap.empty)
+      return sendReplies(res, ["No attendance records found yet."]);
+
+    let lowestCourse = null;
+    let highestCourse = null;
+
+    let lowestPercent = 100;
+    let highestPercent = 0;
+
+    for (const doc of coursesSnap.docs) {
+
+      const courseId = doc.id;
+      const data = doc.data();
+
+      const total = data.totalClasses || 0;
+      const attended = data.attended || 0;
+
+      if (total === 0) continue;
+
+      const percent = (attended / total) * 100;
+
+      const courseInfo =
+        await db.collection("courses").doc(courseId).get();
+
+      const courseName =
+        courseInfo.data()?.name || courseId;
+
+      if (percent < lowestPercent) {
+        lowestPercent = percent;
+        lowestCourse = courseName;
+      }
+
+      if (percent > highestPercent) {
+        highestPercent = percent;
+        highestCourse = courseName;
+      }
+
+    }
+
+    if (userQuery.includes("lowest")) {
+
+      return sendReplies(res, [
+        "📉 Lowest Attendance",
+        `Course : ${lowestCourse}`,
+        `Attendance : ${lowestPercent.toFixed(1)}%`
+      ]);
+
+    }
+
+    if (userQuery.includes("highest")) {
+
+      return sendReplies(res, [
+        "📈 Highest Attendance",
+        `Course : ${highestCourse}`,
+        `Attendance : ${highestPercent.toFixed(1)}%`
+      ]);
+
+    }
+
+    return sendReplies(res, [
+      "📊 Attendance Analysis",
+      `Lowest Attendance : ${lowestCourse} (${lowestPercent.toFixed(1)}%)`,
+      `Highest Attendance : ${highestCourse} (${highestPercent.toFixed(1)}%)`
+    ]);
+
+  }
+
+  catch (error) {
+
+    console.error("Attendance analysis error:", error);
+
+    return sendReplies(res, [
+      "Sorry, I couldn't analyze your attendance."
+    ]);
+
+  }
+
+}
+
+
+/* =========================
+   ATTENDANCE PREDICTION
+========================= */
+
+if (intent === "Attendance_Prediction") {
+
+  console.log("Attendance_Prediction intent triggered");
+
+  if (!requireStudent(res, role)) return;
+
+  try {
+
+    const parameters = req.body.queryResult.parameters || {};
+    const futureMissed = parameters.number || 0;
+
+    const coursesSnap = await db
+      .collection("attendance_summary")
+      .doc(uid)
+      .collection("courses")
+      .get();
+
+    if (coursesSnap.empty)
+      return sendReplies(res, ["No attendance records found yet."]);
+
+    let totalClasses = 0;
+    let attended = 0;
+
+    coursesSnap.forEach(doc => {
+
+      const data = doc.data();
+
+      totalClasses += data.totalClasses || 0;
+      attended += data.attended || 0;
+
+    });
+
+    if (totalClasses === 0)
+      return sendReplies(res, ["No classes recorded yet."]);
+
+    const newTotal = totalClasses + futureMissed;
+
+    const newPercent =
+      ((attended / newTotal) * 100).toFixed(1);
+
+    const currentPercent =
+      ((attended / totalClasses) * 100).toFixed(1);
+
+    const messages = [
+      "📊 Attendance Prediction",
+      `Current Attendance : ${currentPercent}%`,
+      `If you miss ${futureMissed} upcoming classes`,
+      `New Attendance : ${newPercent}%`
+    ];
+
+    if (newPercent < 75)
+      messages.push("⚠️ This will drop your attendance below 75%");
+    else
+      messages.push("✅ Your attendance will remain above 75%");
+
+    return sendReplies(res, messages);
+
+  }
+
+  catch (error) {
+
+    console.error("Attendance prediction error:", error);
+
+    return sendReplies(res, [
+      "Sorry, I couldn't calculate the prediction."
+    ]);
+
+  }
+
+}
+/* =========================
+   SMART ATTENDANCE ADVISOR
+========================= */
+
+if (intent === "Smart_Attendance_Advisor") {
+
+  console.log("Smart_Attendance_Advisor intent triggered");
+
+  if (!requireStudent(res, role)) return;
+
+  try {
+
+    const coursesSnap = await db
+      .collection("attendance_summary")
+      .doc(uid)
+      .collection("courses")
+      .get();
+
+    if (coursesSnap.empty)
+      return sendReplies(res, ["No attendance records found yet."]);
+
+    let totalClasses = 0;
+    let attended = 0;
+
+    coursesSnap.forEach(doc => {
+
+      const data = doc.data();
+
+      totalClasses += data.totalClasses || 0;
+      attended += data.attended || 0;
+
+    });
+
+    if (totalClasses === 0)
+      return sendReplies(res, ["No classes recorded yet."]);
+
+    const percent =
+      ((attended / totalClasses) * 100).toFixed(1);
+
+    const requiredAttendance = 0.75;
+
+    if (percent < 75) {
+
+      const classesNeeded =
+        Math.ceil(
+          (requiredAttendance * totalClasses - attended) /
+          (1 - requiredAttendance)
+        );
+
+      return sendReplies(res, [
+        "⚠️ Attendance Alert",
+        `Current Attendance : ${percent}%`,
+        `Attend the next ${classesNeeded} classes continuously`,
+        "to reach the required 75% attendance."
+      ]);
+
+    }
+
+    const remaining =
+      Math.floor((attended / requiredAttendance) - totalClasses);
+
+    return sendReplies(res, [
+      "✅ Attendance Safe",
+      `Current Attendance : ${percent}%`,
+      `You can miss ${remaining} more class(es)`
+    ]);
+
+  }
+
+  catch (error) {
+
+    console.error("Smart advisor error:", error);
+
+    return sendReplies(res, [
+      "Sorry, I couldn't generate attendance advice."
+    ]);
+
+  }
+
+}
     /* AI FALLBACK */
 
     if (intent === "Default Fallback Intent") {
