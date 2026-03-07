@@ -494,6 +494,23 @@ app.get("/users", verifyAdmin, async (req, res) => {
 });
 
 /* =========================
+   GET COURSES (ADMIN)
+========================= */
+
+app.get("/courses", verifyAdmin, async (req, res) => {
+
+  const snap = await db.collection("courses").get();
+
+  const courses = [];
+
+  snap.forEach(doc => {
+    courses.push(doc.data());
+  });
+
+  res.json(courses);
+
+});
+/* =========================
    DELETE USER (ADMIN)
 ========================= */
 app.delete("/delete-user/:uid", verifyAdmin, async (req, res) => {
