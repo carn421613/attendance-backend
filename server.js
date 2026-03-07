@@ -1160,67 +1160,47 @@ function requireLecturer(res, role) {
    CHATBOT WEBHOOK
 ========================= */
 
+
 app.post("/chatbot", async (req, res) => {
 
   try {
 
     const intent = req.body.queryResult.intent.displayName;
-
     console.log("CHATBOT INTENT:", intent);
 
     let uid = null;
 
     try {
-
       const session = req.body.session;
-
-      if (session) {
-        uid = session.split("/").pop();
-      }
-
-    } catch { }
+      if (session) uid = session.split("/").pop();
+    } catch {}
 
     console.log("UID RECEIVED:", uid);
 
-
-    /* =========================
-       FETCH USER ROLE
-    ========================= */
+    /* FETCH USER ROLE */
 
     let role = "student";
 
     try {
-
       const userDoc = await db.collection("users").doc(uid).get();
-
-      if (userDoc.exists) {
-        role = userDoc.data().role || "student";
-      }
-
-    } catch { }
+      if (userDoc.exists) role = userDoc.data().role || "student";
+    } catch {}
 
     console.log("USER ROLE:", role);
 
 
-
-    /* =========================
-       GREETING
-    ========================= */
+    /* GREETING */
 
     if (intent === "Greeting") {
-
-      return sendReply(
-        res,
-        "Hello! I am your Attendance Assistant."
-      );
-
+      return sendReplies(res, [
+        "Hello!",
+        "I am your Attendance Assistant.",
+        "Ask me about attendance, courses, or enrollment."
+      ]);
     }
 
 
-
-    /* =========================
-       ATTENDANCE SUMMARY
-    ========================= */
+    /* ATTENDANCE SUMMARY */
 
     if (intent === "Attendance_summary") {
 
@@ -1232,14 +1212,13 @@ app.post("/chatbot", async (req, res) => {
         .collection("courses")
         .get();
 
-      if (snap.empty) {
-        return sendReply(res, "No attendance records found yet.");
-      }
+      if (snap.empty)
+        return sendReplies(res, ["No attendance records found yet."]);
 
       let total = 0;
       let attended = 0;
 
-      let response = "📊 Attendance Report\n\n";
+      const messages = ["📊 Attendance Report"];
 
       for (const doc of snap.docs) {
 
@@ -1251,155 +1230,62 @@ app.post("/chatbot", async (req, res) => {
           .doc(courseId)
           .get();
 
-        const courseName =
-          courseInfo.data()?.name || courseId;
+        const name = courseInfo.data()?.name || courseId;
 
         const t = data.totalClasses || 0;
         const a = data.attended || 0;
         const m = t - a;
 
-        const percent =
-          t === 0 ? 0 : ((a / t) * 100).toFixed(1);
+        const percent = t === 0 ? 0 : ((a / t) * 100).toFixed(1);
 
         total += t;
         attended += a;
 
-        response +=
-          `${courseName}
-Total Classes : ${t}
-Attended      : ${a}
-Missed        : ${m}
-Attendance    : ${percent}%\n\n`;
-
+        messages.push(`${name}`);
+        messages.push(`Total Classes : ${t}`);
+        messages.push(`Attended : ${a}`);
+        messages.push(`Missed : ${m}`);
+        messages.push(`Attendance : ${percent}%`);
       }
 
-      const overall =
-        total === 0 ? 0 : ((attended / total) * 100).toFixed(1);
+      const overall = total === 0 ? 0 : ((attended / total) * 100).toFixed(1);
 
-      response += `Overall Attendance : ${overall}%\n`;
+      messages.push(`Overall Attendance : ${overall}%`);
 
       if (overall < 75)
-        response += "⚠️ Your attendance is below 75%";
+        messages.push("⚠️ Your attendance is below 75%");
       else
-        response += "✅ Your attendance is safe";
+        messages.push("✅ Your attendance is safe");
 
-      return sendReply(res, response);
-
+      return sendReplies(res, messages);
     }
 
 
+    /* COURSES ENROLLED */
 
-    /* =========================
-       COURSE ATTENDANCE
-    ========================= */
+    if (intent === "Courses_Enrolled") {
 
-    if (intent === "Attendance_course") {
-
-      if (!requireStudent(res, role)) return;
-
-      const parameters = req.body.queryResult.parameters || {};
-      const courseInput = parameters.course || "";
-
-      const course = await getCourseIdFromAlias(courseInput);
-
-      if (!course)
-        return sendReply(res, "I couldn't recognize that course.");
-
-      const courseId = course.id;
-      const courseName = course.name;
-
-      const enrollmentSnap = await db
-        .collection("enrollments")
-        .doc(courseId)
-        .collection("students")
-        .doc(uid)
-        .get();
-
-      if (!enrollmentSnap.exists)
-        return sendReply(res, `You are not enrolled in ${courseName}`);
-
-      const doc = await db
-        .collection("attendance_summary")
-        .doc(uid)
-        .collection("courses")
-        .doc(courseId)
-        .get();
-
-      if (!doc.exists)
-        return sendReply(res, "No attendance records found yet.");
-
-      const data = doc.data();
-
-      const total = data.totalClasses || 0;
-      const attended = data.attended || 0;
-      const missed = total - attended;
-
-      const percent =
-        total === 0 ? 0 : ((attended / total) * 100).toFixed(1);
-
-      return sendReply(res,
-        `📘 ${courseName}
-
-Total Classes : ${total}
-Attended      : ${attended}
-Missed        : ${missed}
-Attendance    : ${percent}%`
-      );
-
-    }
-
-
-
-    /* =========================
-       ATTENDANCE WARNING
-    ========================= */
-
-    if (intent === "Attendance_Warning") {
+      console.log("Courses_Enrolled intent triggered");
 
       if (!requireStudent(res, role)) return;
 
-      const snap = await db
-        .collection("attendance_summary")
-        .doc(uid)
-        .collection("courses")
-        .get();
+      const userDoc = await db.collection("users").doc(uid).get();
+      const data = userDoc.data();
 
-      let total = 0;
-      let attended = 0;
+      if (!data.enrolledCourses || data.enrolledCourses.length === 0)
+        return sendReplies(res, ["You are not enrolled in any courses."]);
 
-      snap.forEach(doc => {
+      const messages = ["📚 Your Enrolled Courses"];
 
-        const d = doc.data();
-        total += d.totalClasses || 0;
-        attended += d.attended || 0;
-
+      data.enrolledCourses.forEach(course => {
+        messages.push(`• ${course}`);
       });
 
-      if (total === 0)
-        return sendReply(res, "No attendance records yet.");
-
-      const percent = ((attended / total) * 100).toFixed(1);
-
-      if (percent < 75)
-        return sendReply(res,
-          `⚠️ Warning
-
-Current Attendance : ${percent}%
-
-You are below the required 75%.
-Attend upcoming classes.`);
-
-      return sendReply(res,
-        `✅ Attendance Safe
-Current Attendance : ${percent}%`);
-
+      return sendReplies(res, messages);
     }
 
 
-
-    /* =========================
-       MISSED CLASSES
-    ========================= */
+    /* MISSED CLASSES */
 
     if (intent === "missed_classes") {
 
@@ -1411,482 +1297,68 @@ Current Attendance : ${percent}%`);
         .collection("courses")
         .get();
 
+      const messages = ["📊 Missed Classes"];
+
       let totalMissed = 0;
-      let response = "📊 Missed Classes Report\n\n";
+
+      for (const doc of snap.docs) {
+
+        const data = doc.data();
+        const courseId = doc.id;
+
+        const courseInfo = await db.collection("courses").doc(courseId).get();
+        const name = courseInfo.data()?.name || courseId;
+
+        const missed = (data.totalClasses || 0) - (data.attended || 0);
+
+        totalMissed += missed;
+
+        messages.push(`${name} → ${missed} classes missed`);
+      }
+
+      messages.push(`Total Missed Classes : ${totalMissed}`);
+
+      return sendReplies(res, messages);
+    }
+
+
+    /* ENROLLMENT STATUS */
+
+    if (intent === "Enrollment_Status") {
+
+      if (!requireStudent(res, role)) return;
+
+      const snap = await db
+        .collection("enrollment_requests")
+        .where("studentUid", "==", uid)
+        .get();
+
+      if (snap.empty)
+        return sendReplies(res, ["You have not submitted any enrollment requests."]);
+
+      const messages = ["📄 Enrollment Status"];
 
       for (const doc of snap.docs) {
 
         const data = doc.data();
 
-        const courseId = doc.id;
-
-        const courseInfo =
-          await db.collection("courses").doc(courseId).get();
-
-        const name = courseInfo.data()?.name || courseId;
-
-        const missed =
-          (data.totalClasses || 0) - (data.attended || 0);
-
-        totalMissed += missed;
-
-        response += `${name} → ${missed} classes missed\n`;
-
-      }
-
-      response += `\nTotal Missed Classes : ${totalMissed}`;
-
-      return sendReply(res, response);
-
-    }
-
-
-
-
-
-    /* =========================
-       COURSES ENROLLED
-    ========================= */
-
-    if (intent === "Courses_Enrolled") {
-
-  console.log("Courses_Enrolled intent triggered");
-
-  if (!requireStudent(res, role)) return;
-
-  try {
-
-    const userDoc = await db.collection("users").doc(uid).get();
-
-    const data = userDoc.data();
-
-    if (!data.enrolledCourses || data.enrolledCourses.length === 0) {
-      return sendReply(res, "You are not enrolled in any courses.");
-    }
-
-    let response = "📚 Your Enrolled Courses\n\n";
-
-    data.enrolledCourses.forEach(course => {
-      response += `• ${course}\n`;
-    });
-
-    return sendReply(res, response);
-
-  } catch (error) {
-
-    console.error("Courses_Enrolled error:", error);
-
-    return sendReply(res, "Error retrieving enrolled courses.");
-
-  }
-
-}
-
-
-
-
-
-    /* =========================
-       REMAINING BUNK
-    ========================= */
-
-    if (intent === "Remaining_Bunk") {
-
-      if (!requireStudent(res, role)) return;
-
-      const snap = await db
-        .collection("attendance_summary")
-        .doc(uid)
-        .collection("courses")
-        .get();
-
-      let total = 0;
-      let attended = 0;
-
-      snap.forEach(doc => {
-
-        const d = doc.data();
-        total += d.totalClasses || 0;
-        attended += d.attended || 0;
-
-      });
-
-      const minAttendance = 0.75;
-
-      const remaining =
-        Math.floor((attended / minAttendance) - total);
-
-      if (remaining <= 0)
-        return sendReply(res,
-          `⚠️ Attendance Limit Reached
-
-You cannot miss any more classes.`);
-
-      return sendReply(res,
-        `📌 Remaining Bunks
-
-You can miss ${remaining} more class(es).`);
-
-    }
-
-
-    /* =========================
-    ENROLLMENT STATUS
- ========================= */
-
-    if (intent === "Enrollment_Status") {
-
-      console.log("Enrollment_Status intent triggered");
-
-      // Only students can access
-      if (!requireStudent(res, role)) return;
-
-      try {
-
-        // Get all enrollment requests for this student
-        const snap = await db
-          .collection("enrollment_requests")
-          .where("studentUid", "==", uid)
-          .get();
-
-        // If no requests found
-        if (snap.empty) {
-          return sendReply(
-            res,
-            "You have not submitted any enrollment requests."
-          );
-        }
-
-        let response = "📄 Enrollment Status\n\n";
-
-        /* =========================
-           FETCH COURSE NAMES IN PARALLEL
-        ========================= */
-
-        const promises = snap.docs.map(async (doc) => {
-
-          const data = doc.data();
-
-          try {
-
-            const courseDoc = await db
-              .collection("courses")
-              .doc(data.courseId)
-              .get();
-
-            const courseName =
-              courseDoc.exists
-                ? courseDoc.data().name
-                : data.courseId;
-
-            return `${courseName} → ${data.status}`;
-
-          }
-
-          catch (error) {
-
-            console.error("Course fetch error:", error);
-
-            return `${data.courseId} → ${data.status}`;
-
-          }
-
-        });
-
-        // Wait for all course fetches simultaneously
-        const results = await Promise.all(promises);
-
-        response += results.join("\n");
-
-        return sendReply(res, response);
-
-      }
-
-      catch (error) {
-
-        console.error("Enrollment status error:", error);
-
-        return sendReply(
-          res,
-          "Sorry, I couldn't retrieve your enrollment status."
-        );
-
-      }
-
-    }
-
-    /* =========================
-   LOWEST / HIGHEST ATTENDANCE
-========================= */
-
-    if (intent === "lowest_highest_attendance") {
-
-      console.log("lowest_highest_attendance intent triggered");
-      if (!requireStudent(res, role)) return;
-
-      try {
-
-        const userQuery = req.body.queryResult.queryText.toLowerCase();
-
-        const coursesSnap = await db
-          .collection("attendance_summary")
-          .doc(uid)
+        const courseDoc = await db
           .collection("courses")
+          .doc(data.courseId)
           .get();
 
-        if (coursesSnap.empty) {
-          return sendReply(res, "No attendance records found yet.");
-        }
+        const courseName = courseDoc.exists
+          ? courseDoc.data().name
+          : data.courseId;
 
-        let lowestCourse = null;
-        let highestCourse = null;
-
-        let lowestPercent = 100;
-        let highestPercent = 0;
-
-        for (const doc of coursesSnap.docs) {
-
-          const courseId = doc.id;
-          const data = doc.data();
-
-          const total = data.totalClasses || 0;
-          const attended = data.attended || 0;
-
-          if (total === 0) continue;
-
-          const percent = (attended / total) * 100;
-
-          const courseInfo =
-            await db.collection("courses").doc(courseId).get();
-
-          const courseName =
-            courseInfo.data()?.name || courseId;
-
-          if (percent < lowestPercent) {
-
-            lowestPercent = percent;
-            lowestCourse = courseName;
-
-          }
-
-          if (percent > highestPercent) {
-
-            highestPercent = percent;
-            highestCourse = courseName;
-
-          }
-
-        }
-
-        if (userQuery.includes("lowest")) {
-
-          return sendReply(res,
-            `📉 Lowest Attendance
-
-Course : ${lowestCourse}
-Attendance : ${lowestPercent.toFixed(1)}%`);
-
-        }
-
-        if (userQuery.includes("highest")) {
-
-          return sendReply(res,
-            `📈 Highest Attendance
-
-Course : ${highestCourse}
-Attendance : ${highestPercent.toFixed(1)}%`);
-
-        }
-
-        return sendReply(res,
-          `📊 Attendance Analysis
-
-Lowest Attendance : ${lowestCourse} (${lowestPercent.toFixed(1)}%)
-Highest Attendance : ${highestCourse} (${highestPercent.toFixed(1)}%)`);
-
+        messages.push(`${courseName} → ${data.status}`);
       }
 
-      catch (error) {
-
-        console.error("Attendance analysis error:", error);
-
-        return sendReply(res, "Sorry, I couldn't analyze your attendance.");
-
-      }
-
+      return sendReplies(res, messages);
     }
 
-    /* =========================
-       ATTENDANCE PREDICTION
-    ========================= */
 
-    if (intent === "Attendance_Prediction") {
-
-      console.log("Attendance_Prediction intent triggered");
-      if (!requireStudent(res, role)) return;
-
-      try {
-
-        const parameters = req.body.queryResult.parameters || {};
-        const futureMissed = parameters.number || 0;
-
-        const coursesSnap = await db
-          .collection("attendance_summary")
-          .doc(uid)
-          .collection("courses")
-          .get();
-
-        if (coursesSnap.empty) {
-          return sendReply(res, "No attendance records found yet.");
-        }
-
-        let totalClasses = 0;
-        let attended = 0;
-
-        coursesSnap.forEach(doc => {
-
-          const data = doc.data();
-
-          totalClasses += data.totalClasses || 0;
-          attended += data.attended || 0;
-
-        });
-
-        if (totalClasses === 0) {
-          return sendReply(res, "No classes recorded yet.");
-        }
-
-        const newTotal = totalClasses + futureMissed;
-
-        const newPercent = ((attended / newTotal) * 100).toFixed(1);
-
-        let responseText =
-          `📊 Attendance Prediction
-
-Current Attendance : ${((attended / totalClasses) * 100).toFixed(1)}%
-
-If you miss ${futureMissed} upcoming classes:
-
-New Attendance : ${newPercent}%`;
-
-        if (newPercent < 75) {
-
-          responseText +=
-            `
-
-⚠️ This will drop your attendance below 75%.`;
-
-        } else {
-
-          responseText +=
-            `
-
-✅ Your attendance will remain above 75%.`;
-
-        }
-
-        return sendReply(res, responseText);
-
-      }
-
-      catch (error) {
-
-        console.error("Attendance prediction error:", error);
-
-        return sendReply(res, "Sorry, I couldn't calculate the prediction.");
-
-      }
-
-    }
-
-    /* =========================
-       SMART ATTENDANCE ADVISOR
-    ========================= */
-
-    if (intent === "Smart_Attendance_Advisor") {
-
-      console.log("Smart_Attendance_Advisor intent triggered");
-      if (!requireStudent(res, role)) return;
-
-      try {
-
-        const coursesSnap = await db
-          .collection("attendance_summary")
-          .doc(uid)
-          .collection("courses")
-          .get();
-
-        if (coursesSnap.empty) {
-          return sendReply(res, "No attendance records found yet.");
-        }
-
-        let totalClasses = 0;
-        let attended = 0;
-
-        coursesSnap.forEach(doc => {
-
-          const data = doc.data();
-
-          totalClasses += data.totalClasses || 0;
-          attended += data.attended || 0;
-
-        });
-
-        if (totalClasses === 0) {
-          return sendReply(res, "No classes recorded yet.");
-        }
-
-        const percent = ((attended / totalClasses) * 100).toFixed(1);
-
-        const requiredAttendance = 0.75;
-
-        let advice = "";
-
-        if (percent < 75) {
-
-          const classesNeeded =
-            Math.ceil((requiredAttendance * totalClasses - attended) / (1 - requiredAttendance));
-
-          advice =
-            `⚠️ Attendance Alert
-
-Current Attendance : ${percent}%
-
-You must attend the next ${classesNeeded} classes continuously
-to reach the required 75% attendance.`;
-
-        } else {
-
-          const remaining =
-            Math.floor((attended / requiredAttendance) - totalClasses);
-
-          advice =
-            `✅ Attendance Status : Safe
-
-Current Attendance : ${percent}%
-
-You can miss ${remaining} more class(es)
-without dropping below 75%.`;
-
-        }
-
-        return sendReply(res, advice);
-
-      }
-
-      catch (error) {
-
-        console.error("Smart advisor error:", error);
-
-        return sendReply(res, "Sorry, I couldn't generate attendance advice.");
-
-      }
-
-    }
-
-    /* =========================
-       AI FALLBACK
-    ========================= */
+    /* AI FALLBACK */
 
     if (intent === "Default Fallback Intent") {
 
@@ -1894,60 +1366,11 @@ without dropping below 75%.`;
 
       const aiReply = await askAI(userMessage);
 
-      return sendReply(res, aiReply);
-
+      return sendReplies(res, [aiReply]);
     }
 
 
-
-    /* =========================
-       LECTURER COURSES
-    ========================= */
-
-    if (intent === "Lecturer_Courses") {
-
-      if (!requireLecturer(res, role)) return;
-
-      const snap = await db
-        .collection("lecturer_courses")
-        .where("lecturerUid", "==", uid)
-        .get();
-
-      if (snap.empty)
-        return sendReply(res,
-          "You are not assigned to any courses.");
-
-      let response = "📚 Your Assigned Courses\n\n";
-
-      for (const doc of snap.docs) {
-
-        const data = doc.data();
-
-        const courseInfo =
-          await db.collection("courses")
-            .doc(data.courseId).get();
-
-        const name =
-          courseInfo.data()?.name || data.courseId;
-
-        response +=
-          `${name}
-Branch : ${data.branch}
-Year : ${data.year}
-Semester : ${data.semester}\n\n`;
-
-      }
-
-      return sendReply(res, response);
-
-    }
-
-
-
-    return sendReply(
-      res,
-      "Ask me about your attendance."
-    );
+    return sendReplies(res, ["Ask me about your attendance."]);
 
   }
 
@@ -1955,14 +1378,12 @@ Semester : ${data.semester}\n\n`;
 
     console.error("CHATBOT ERROR:", err);
 
-    return sendReply(
-      res,
-      "Something went wrong."
-    );
-
+    return sendReplies(res, ["Something went wrong."]);
   }
 
 });
+
+
 
 
 /* =========================
