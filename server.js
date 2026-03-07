@@ -190,10 +190,10 @@ app.post("/enroll", upload.array("photos", 3), async (req, res) => {
 
     const existingEnrollment =
       await db.collection("student_courses")
-      .doc(courseId)
-      .collection("students")
-      .doc(uid)
-      .get();
+        .doc(courseId)
+        .collection("students")
+        .doc(uid)
+        .get();
 
     if (existingEnrollment.exists) {
       return res.status(400).json({
@@ -289,7 +289,7 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
 
     const request = requestSnap.data();
 
-    const { courseId, courseName, studentUid, roll} = request;
+    const { courseId, courseName, studentUid, roll } = request;
 
     /* FETCH STUDENT */
 
@@ -334,7 +334,7 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
     /* PREREQUISITE CHECK */
 
     if (rule.prerequisite &&
-        !completedSubjects.includes(rule.prerequisite)) {
+      !completedSubjects.includes(rule.prerequisite)) {
 
       await requestRef.update({ status: "rejected" });
 
@@ -421,6 +421,16 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
     }, { merge: true });
 
     await requestRef.update({ status: "approved" });
+
+    await db
+      .collection("users")
+      .doc(studentUid)
+      .set(
+        {
+          enrolledCourses: admin.firestore.FieldValue.arrayUnion(courseName)
+        },
+        { merge: true }
+      );
 
     res.json({
       message: "Enrollment approved successfully"
@@ -1432,17 +1442,7 @@ Current Attendance : ${percent}%`);
 
 
 
-    /* =========================
-       COURSES ENROLLED
-    ========================= */
 
-    /* =========================
-    COURSES ENROLLED
- ========================= */
-
-    /* =========================
-       COURSES ENROLLED
-    ========================= */
 
     /* =========================
        COURSES ENROLLED
@@ -1450,64 +1450,39 @@ Current Attendance : ${percent}%`);
 
     if (intent === "Courses_Enrolled") {
 
-      console.log("Courses_Enrolled intent triggered");
+  console.log("Courses_Enrolled intent triggered");
 
-      if (!requireStudent(res, role)) return;
+  if (!requireStudent(res, role)) return;
 
-      try {
+  try {
 
-        const enrollSnap = await db.collection("enrollments").get();
+    const userDoc = await db.collection("users").doc(uid).get();
 
-        let response = "📚 Your Enrolled Courses\n\n";
-        let found = false;
+    const data = userDoc.data();
 
-        for (const courseDoc of enrollSnap.docs) {
-
-          const courseId = courseDoc.id;
-
-          console.log("Checking course:", courseId);
-
-          const studentDoc = await db
-            .collection("enrollments")
-            .doc(courseId)
-            .collection("students")
-            .doc(uid)
-            .get();
-
-          console.log(
-            "Student doc exists for",
-            courseId,
-            ":",
-            studentDoc.exists
-          );
-
-          if (studentDoc.exists) {
-
-            const data = studentDoc.data();
-
-            found = true;
-
-            response += `• ${data.courseName || courseId}\n`;
-
-          }
-
-        }
-
-        if (!found) {
-          return sendReply(res, "You are not enrolled in any courses.");
-        }
-
-        return sendReply(res, response);
-
-      } catch (error) {
-
-        console.error("Courses_Enrolled error:", error);
-
-        return sendReply(res, "Error retrieving enrolled courses.");
-
-      }
-
+    if (!data.enrolledCourses || data.enrolledCourses.length === 0) {
+      return sendReply(res, "You are not enrolled in any courses.");
     }
+
+    let response = "📚 Your Enrolled Courses\n\n";
+
+    data.enrolledCourses.forEach(course => {
+      response += `• ${course}\n`;
+    });
+
+    return sendReply(res, response);
+
+  } catch (error) {
+
+    console.error("Courses_Enrolled error:", error);
+
+    return sendReply(res, "Error retrieving enrolled courses.");
+
+  }
+
+}
+
+
 
 
 
