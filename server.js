@@ -169,55 +169,39 @@ app.post("/enroll", upload.array("photos", 3), async (req, res) => {
     const { uid, roll, courseId } = req.body;
 
     if (!uid || !roll || !courseId) {
-      return res.status(400).json({
-        error: "Missing fields"
-      });
+      return res.status(400).json({ error: "Missing fields" });
     }
 
     if (!req.files || req.files.length < 2) {
-      return res.status(400).json({
-        error: "At least 2 photos required"
-      });
+      return res.status(400).json({ error: "At least 2 photos required" });
     }
 
-    /* =========================
-       VALIDATE COURSE
-    ========================= */
+    /* VALIDATE COURSE */
 
-    const courseDoc =
-      await db.collection("courses").doc(courseId).get();
+    const courseDoc = await db.collection("courses").doc(courseId).get();
 
     if (!courseDoc.exists) {
-
-      return res.status(400).json({
-        error: "Invalid course selected"
-      });
-
+      return res.status(400).json({ error: "Invalid course selected" });
     }
 
     const courseName = courseDoc.data().name;
 
-    /* =========================
-       CHECK DUPLICATE ENROLLMENT
-    ========================= */
+    /* CHECK DUPLICATE ENROLLMENT */
 
-    const existingEnrollment = await db
-      .collection("enrollments")
-      .where("studentUid", "==", uid)
-      .where("courseId", "==", courseId)
+    const existingEnrollment =
+      await db.collection("student_courses")
+      .doc(courseId)
+      .collection("students")
+      .doc(uid)
       .get();
 
-    if (!existingEnrollment.empty) {
-
+    if (existingEnrollment.exists) {
       return res.status(400).json({
-        error: `You are already enrolled in ${courseName}.`
+        error: `You are already enrolled in ${courseName}`
       });
-
     }
 
-    /* =========================
-       CHECK PENDING REQUEST
-    ========================= */
+    /* CHECK PENDING REQUEST */
 
     const existingRequest = await db
       .collection("enrollment_requests")
@@ -227,16 +211,12 @@ app.post("/enroll", upload.array("photos", 3), async (req, res) => {
       .get();
 
     if (!existingRequest.empty) {
-
       return res.status(400).json({
-        error: `You already have a pending request for ${courseName}.`
+        error: `You already have a pending request for ${courseName}`
       });
-
     }
 
-    /* =========================
-       UPLOAD PHOTOS
-    ========================= */
+    /* UPLOAD PHOTOS */
 
     const uploadedPhotos = [];
 
@@ -251,12 +231,9 @@ app.post("/enroll", upload.array("photos", 3), async (req, res) => {
         });
 
       uploadedPhotos.push(result.secure_url);
-
     }
 
-    /* =========================
-       CREATE ENROLLMENT REQUEST
-    ========================= */
+    /* CREATE ENROLLMENT REQUEST */
 
     await db.collection("enrollment_requests").add({
 
@@ -290,6 +267,7 @@ app.post("/enroll", upload.array("photos", 3), async (req, res) => {
 /* =========================
    APPROVE ENROLLMENT (ADMIN)
 ========================= */
+
 /* =========================
    APPROVE ENROLLMENT (ADMIN)
 ========================= */
@@ -298,46 +276,35 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
 
   try {
 
+    console.log("=== APPROVE ENROLLMENT START ===");
+
     const requestRef =
       db.collection("enrollment_requests").doc(req.params.id);
 
     const requestSnap = await requestRef.get();
 
-    if (!requestSnap.exists)
+    if (!requestSnap.exists) {
       return res.status(404).json({ error: "Request not found" });
+    }
 
     const request = requestSnap.data();
 
-    const courseId = request.courseId;
-    const courseName = request.courseName;
+    const { courseId, courseName, studentUid } = request;
 
-    if (!courseId)
-      return res.status(400).json({ error: "Course not found in request" });
-
-
-    /* =========================
-       FETCH STUDENT PROFILE
-    ========================= */
+    /* FETCH STUDENT */
 
     const studentSnap =
-      await db.collection("users")
-        .doc(request.studentUid)
-        .get();
+      await db.collection("users").doc(studentUid).get();
 
     if (!studentSnap.exists)
       return res.status(404).json({ error: "Student not found" });
 
     const student = studentSnap.data();
 
-
     const completedSubjects =
-      (student.semesters || [])
-        .flatMap(s => s.subjects || []);
+      (student.semesters || []).flatMap(s => s.subjects || []);
 
-
-    /* =========================
-       COURSE RULES
-    ========================= */
+    /* COURSE RULES */
 
     const courseRules = {
 
@@ -359,190 +326,101 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
 
     const rule =
       courseRules[courseName.toLowerCase()] || {
-
         minCgpa: 7.0,
         strictCgpa: 8.0,
         seatLimit: 80
-
       };
 
-
-    /* =========================
-       PREREQUISITE CHECK
-    ========================= */
+    /* PREREQUISITE CHECK */
 
     if (rule.prerequisite &&
-      !completedSubjects.includes(rule.prerequisite)) {
+        !completedSubjects.includes(rule.prerequisite)) {
 
-      await db
-        .collection("rejections")
-        .doc(courseId)
-        .collection("students")
-        .doc(request.studentUid)
-        .set({
-
-          studentUid: request.studentUid,
-          courseId,
-          courseName,
-          cgpa: student.cgpa,
-          reason: "Prerequisite not completed",
-
-          rejectedAt:
-            admin.firestore.FieldValue.serverTimestamp()
-
-        });
-
-      await requestRef.update({
-        status: "rejected"
-      });
+      await requestRef.update({ status: "rejected" });
 
       return res.json({
         message: "Rejected — prerequisite not completed"
       });
-
     }
 
-
-    /* =========================
-       CGPA CHECK
-    ========================= */
+    /* CGPA CHECK */
 
     if (Number(student.cgpa) < rule.minCgpa) {
 
-      await db
-        .collection("rejections")
-        .doc(courseId)
-        .collection("students")
-        .doc(request.studentUid)
-        .set({
-
-          studentUid: request.studentUid,
-          courseId,
-          courseName,
-          cgpa: student.cgpa,
-          reason: `Minimum CGPA ${rule.minCgpa} required`,
-
-          rejectedAt:
-            admin.firestore.FieldValue.serverTimestamp()
-
-        });
-
-      await requestRef.update({
-        status: "rejected"
-      });
+      await requestRef.update({ status: "rejected" });
 
       return res.json({
         message: "Rejected — CGPA below requirement"
       });
-
     }
 
+    /* CHECK CURRENT SEATS */
 
-    /* =========================
-       SEAT COUNT
-    ========================= */
+    const courseRef =
+      db.collection("student_courses").doc(courseId);
 
-    const enrolledSnap =
-      await db.collection("enrollments")
-        .doc(courseId)
-        .collection("students")
-        .get();
+    const courseDoc = await courseRef.get();
 
-    const seatCount = enrolledSnap.size;
+    const seatCount =
+      courseDoc.exists ? (courseDoc.data().count || 0) : 0;
 
+    console.log("Current seats:", seatCount);
 
-    /* =========================
-       SEATS FULL
-    ========================= */
+    /* SEATS FULL */
 
     if (seatCount >= rule.seatLimit) {
 
       if (Number(student.cgpa) >= rule.strictCgpa) {
 
-        await db
-          .collection("enrollments")
-          .doc(courseId)
-          .collection("students")
-          .doc(request.studentUid)
-          .set({
+        console.log("Approved under strict CGPA");
 
-            studentUid: request.studentUid,
-            courseId,
-            courseName,
-            cgpa: student.cgpa,
+      } else {
 
-            approvedAt:
-              admin.firestore.FieldValue.serverTimestamp()
-
-          });
-
-        await requestRef.update({
-          status: "approved"
-        });
+        await requestRef.update({ status: "waitlisted" });
 
         return res.json({
-          message: "Approved under strict CGPA rule"
+          message: "Added to waitlist"
         });
-
       }
-
-
-      /* =========================
-         ADD TO WAITLIST
-      ========================= */
-
-      await db
-        .collection("waitlists")
-        .doc(courseId)
-        .collection("students")
-        .doc(request.studentUid)
-        .set({
-
-          studentUid: request.studentUid,
-          courseId,
-          courseName,
-          cgpa: student.cgpa,
-
-          createdAt:
-            admin.firestore.FieldValue.serverTimestamp()
-
-        });
-
-      await requestRef.update({
-        status: "waitlisted"
-      });
-
-      return res.json({
-        message: "Added to waitlist"
-      });
-
     }
 
+    /* NORMAL APPROVAL */
 
-    /* =========================
-       NORMAL APPROVAL
-    ========================= */
+    console.log("Normal approval");
 
-    await db
-      .collection("enrollments")
-      .doc(courseId)
+    /* Ensure course doc exists */
+
+    await courseRef.set({
+
+      courseId,
+      course: courseName,
+      count: admin.firestore.FieldValue.increment(0)
+
+    }, { merge: true });
+
+    /* Add student */
+
+    await courseRef
       .collection("students")
-      .doc(request.studentUid)
+      .doc(studentUid)
       .set({
 
-        studentUid: request.studentUid,
-        courseId,
-        courseName,
-        cgpa: student.cgpa,
-
-        approvedAt:
+        studentUid,
+        roll: student.roll,
+        enrolledAt:
           admin.firestore.FieldValue.serverTimestamp()
 
       });
 
-    await requestRef.update({
-      status: "approved"
-    });
+    /* Increment count */
+
+    await courseRef.set({
+
+      count: admin.firestore.FieldValue.increment(1)
+
+    }, { merge: true });
+
+    await requestRef.update({ status: "approved" });
 
     res.json({
       message: "Enrollment approved successfully"
@@ -561,6 +439,18 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
   }
 
 });
+
+
+
+
+
+
+
+
+
+
+
+
 /* =========================
    CREATE STUDENT (ADMIN)
 ========================= */
@@ -1546,42 +1436,76 @@ Current Attendance : ${percent}%`);
        COURSES ENROLLED
     ========================= */
 
+    /* =========================
+    COURSES ENROLLED
+ ========================= */
+
+    /* =========================
+       COURSES ENROLLED
+    ========================= */
+
+    /* =========================
+       COURSES ENROLLED
+    ========================= */
+
     if (intent === "Courses_Enrolled") {
+
+      console.log("Courses_Enrolled intent triggered");
 
       if (!requireStudent(res, role)) return;
 
-      const snap = await db
-        .collection("courses")
-        .get();
+      try {
 
-      let response = "📚 Your Enrolled Courses\n\n";
-      let found = false;
+        const enrollSnap = await db.collection("enrollments").get();
 
-      for (const doc of snap.docs) {
+        let response = "📚 Your Enrolled Courses\n\n";
+        let found = false;
 
-        const courseId = doc.id;
+        for (const courseDoc of enrollSnap.docs) {
 
-        const studentDoc = await db
-          .collection("enrollments")
-          .doc(courseId)
-          .collection("students")
-          .doc(uid)
-          .get();
+          const courseId = courseDoc.id;
 
-        if (studentDoc.exists) {
+          console.log("Checking course:", courseId);
 
-          found = true;
-          response += `• ${doc.data().name}\n`;
+          const studentDoc = await db
+            .collection("enrollments")
+            .doc(courseId)
+            .collection("students")
+            .doc(uid)
+            .get();
+
+          console.log(
+            "Student doc exists for",
+            courseId,
+            ":",
+            studentDoc.exists
+          );
+
+          if (studentDoc.exists) {
+
+            const data = studentDoc.data();
+
+            found = true;
+
+            response += `• ${data.courseName || courseId}\n`;
+
+          }
 
         }
 
+        if (!found) {
+          return sendReply(res, "You are not enrolled in any courses.");
+        }
+
+        return sendReply(res, response);
+
+      } catch (error) {
+
+        console.error("Courses_Enrolled error:", error);
+
+        return sendReply(res, "Error retrieving enrolled courses.");
+
       }
-
-      if (!found)
-        return sendReply(res,
-          "You are not enrolled in any courses.");
-
-      return sendReply(res, response);
 
     }
 
@@ -1631,45 +1555,90 @@ You can miss ${remaining} more class(es).`);
     }
 
 
-
     /* =========================
-       ENROLLMENT STATUS
-    ========================= */
+    ENROLLMENT STATUS
+ ========================= */
 
     if (intent === "Enrollment_Status") {
 
+      console.log("Enrollment_Status intent triggered");
+
+      // Only students can access
       if (!requireStudent(res, role)) return;
 
-      const snap = await db
-        .collection("enrollment_requests")
-        .where("studentUid", "==", uid)
-        .get();
+      try {
 
-      if (snap.empty)
-        return sendReply(res,
-          "You have not submitted any enrollment requests.");
+        // Get all enrollment requests for this student
+        const snap = await db
+          .collection("enrollment_requests")
+          .where("studentUid", "==", uid)
+          .get();
 
-      let response = "📄 Enrollment Status\n\n";
+        // If no requests found
+        if (snap.empty) {
+          return sendReply(
+            res,
+            "You have not submitted any enrollment requests."
+          );
+        }
 
-      for (const doc of snap.docs) {
+        let response = "📄 Enrollment Status\n\n";
 
-        const data = doc.data();
+        /* =========================
+           FETCH COURSE NAMES IN PARALLEL
+        ========================= */
 
-        const courseInfo =
-          await db.collection("courses")
-            .doc(data.courseId).get();
+        const promises = snap.docs.map(async (doc) => {
 
-        const name =
-          courseInfo.data()?.name || data.courseId;
+          const data = doc.data();
 
-        response += `${name} → ${data.status}\n`;
+          try {
+
+            const courseDoc = await db
+              .collection("courses")
+              .doc(data.courseId)
+              .get();
+
+            const courseName =
+              courseDoc.exists
+                ? courseDoc.data().name
+                : data.courseId;
+
+            return `${courseName} → ${data.status}`;
+
+          }
+
+          catch (error) {
+
+            console.error("Course fetch error:", error);
+
+            return `${data.courseId} → ${data.status}`;
+
+          }
+
+        });
+
+        // Wait for all course fetches simultaneously
+        const results = await Promise.all(promises);
+
+        response += results.join("\n");
+
+        return sendReply(res, response);
 
       }
 
-      return sendReply(res, response);
+      catch (error) {
+
+        console.error("Enrollment status error:", error);
+
+        return sendReply(
+          res,
+          "Sorry, I couldn't retrieve your enrollment status."
+        );
+
+      }
 
     }
-
 
     /* =========================
    LOWEST / HIGHEST ATTENDANCE
