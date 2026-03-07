@@ -293,37 +293,57 @@ app.post("/enroll", upload.array("photos", 3), async (req, res) => {
 /* =========================
    APPROVE ENROLLMENT (ADMIN)
 ========================= */
+/* =========================
+   APPROVE ENROLLMENT (ADMIN)
+========================= */
+
 app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
+
   try {
+
     const requestRef =
       db.collection("enrollment_requests").doc(req.params.id);
 
     const requestSnap = await requestRef.get();
+
     if (!requestSnap.exists)
       return res.status(404).json({ error: "Request not found" });
 
     const request = requestSnap.data();
 
-    /* ==========================
+    const courseId = request.courseId;
+    const courseName = request.courseName;
+
+    if (!courseId)
+      return res.status(400).json({ error: "Course not found in request" });
+
+
+    /* =========================
        FETCH STUDENT PROFILE
-    ========================== */
-    const studentSnap = await db
-      .collection("users")
-      .doc(request.studentUid)
-      .get();
+    ========================= */
+
+    const studentSnap =
+      await db.collection("users")
+        .doc(request.studentUid)
+        .get();
 
     if (!studentSnap.exists)
       return res.status(404).json({ error: "Student not found" });
 
     const student = studentSnap.data();
 
-    const completedSubjects =
-      (student.semesters || []).flatMap(s => s.subjects || []);
 
-    /* ==========================
+    const completedSubjects =
+      (student.semesters || [])
+        .flatMap(s => s.subjects || []);
+
+
+    /* =========================
        COURSE RULES
-    ========================== */
+    ========================= */
+
     const courseRules = {
+
       "advanced data structures": {
         prerequisite: "data structures",
         minCgpa: 7.5,
@@ -337,107 +357,191 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
         strictCgpa: 8.5,
         seatLimit: 80
       }
+
     };
 
-    const course = request.course.toLowerCase();
+    const rule =
+      courseRules[courseName.toLowerCase()] || {
 
-    // ✅ DEFAULT RULE (for all other courses)
-    const rule = courseRules[course] || {
-      minCgpa: 7.0,
-      strictCgpa: 8.0,
-      seatLimit: 80
-    };
+        minCgpa: 7.0,
+        strictCgpa: 8.0,
+        seatLimit: 80
 
-    /* ==========================
+      };
+
+
+    /* =========================
        PREREQUISITE CHECK
-    ========================== */
+    ========================= */
+
     if (rule.prerequisite &&
       !completedSubjects.includes(rule.prerequisite)) {
 
+      await db
+        .collection("rejections")
+        .doc(courseId)
+        .collection("students")
+        .doc(request.studentUid)
+        .set({
+
+          studentUid: request.studentUid,
+          courseId,
+          courseName,
+          cgpa: student.cgpa,
+          reason: "Prerequisite not completed",
+
+          rejectedAt:
+            admin.firestore.FieldValue.serverTimestamp()
+
+        });
+
       await requestRef.update({
-        status: "rejected",
-        reason: "Prerequisite not completed"
+        status: "rejected"
       });
 
       return res.json({
         message: "Rejected — prerequisite not completed"
       });
+
     }
 
-    /* ==========================
-       CGPA BASIC CHECK
-    ========================== */
+
+    /* =========================
+       CGPA CHECK
+    ========================= */
+
     if (Number(student.cgpa) < rule.minCgpa) {
+
+      await db
+        .collection("rejections")
+        .doc(courseId)
+        .collection("students")
+        .doc(request.studentUid)
+        .set({
+
+          studentUid: request.studentUid,
+          courseId,
+          courseName,
+          cgpa: student.cgpa,
+          reason: `Minimum CGPA ${rule.minCgpa} required`,
+
+          rejectedAt:
+            admin.firestore.FieldValue.serverTimestamp()
+
+        });
+
       await requestRef.update({
-        status: "rejected",
-        reason: `Minimum CGPA ${rule.minCgpa} required`
+        status: "rejected"
       });
 
       return res.json({
         message: "Rejected — CGPA below requirement"
       });
+
     }
 
-    /* ==========================
+
+    /* =========================
        SEAT COUNT
-    ========================== */
-    const enrolledSnap = await db
-      .collection("enrollments")
-      .where("course", "==", course)
-      .get();
+    ========================= */
+
+    const enrolledSnap =
+      await db.collection("enrollments")
+        .doc(courseId)
+        .collection("students")
+        .get();
 
     const seatCount = enrolledSnap.size;
 
-    /* ==========================
-       STRICT RULE (>80)
-    ========================== */
+
+    /* =========================
+       SEATS FULL
+    ========================= */
+
     if (seatCount >= rule.seatLimit) {
 
       if (Number(student.cgpa) >= rule.strictCgpa) {
 
-        await db.collection("enrollments").add({
-          studentUid: request.studentUid,
-          course,
-          cgpa: student.cgpa,
-          approvedAt: admin.firestore.FieldValue.serverTimestamp()
-        });
+        await db
+          .collection("enrollments")
+          .doc(courseId)
+          .collection("students")
+          .doc(request.studentUid)
+          .set({
+
+            studentUid: request.studentUid,
+            courseId,
+            courseName,
+            cgpa: student.cgpa,
+
+            approvedAt:
+              admin.firestore.FieldValue.serverTimestamp()
+
+          });
 
         await requestRef.update({
           status: "approved"
         });
 
         return res.json({
-          message: "Approved under strict CGPA criteria"
+          message: "Approved under strict CGPA rule"
         });
 
-      } else {
-
-        await db.collection("waitlist").add({
-          studentUid: request.studentUid,
-          course,
-          cgpa: student.cgpa,
-          createdAt: admin.firestore.FieldValue.serverTimestamp()
-        });
-
-        await requestRef.update({
-          status: "waitlisted"
-        });
-
-        return res.json({
-          message: "Added to waitlist"
-        });
       }
+
+
+      /* =========================
+         ADD TO WAITLIST
+      ========================= */
+
+      await db
+        .collection("waitlists")
+        .doc(courseId)
+        .collection("students")
+        .doc(request.studentUid)
+        .set({
+
+          studentUid: request.studentUid,
+          courseId,
+          courseName,
+          cgpa: student.cgpa,
+
+          createdAt:
+            admin.firestore.FieldValue.serverTimestamp()
+
+        });
+
+      await requestRef.update({
+        status: "waitlisted"
+      });
+
+      return res.json({
+        message: "Added to waitlist"
+      });
+
     }
 
-    /* ==========================
+
+    /* =========================
        NORMAL APPROVAL
-    ========================== */
-    await db.collection("enrollments").add({
-      studentUid: request.studentUid,
-      course,
-      cgpa: student.cgpa,
-      approvedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
+    ========================= */
+
+    await db
+      .collection("enrollments")
+      .doc(courseId)
+      .collection("students")
+      .doc(request.studentUid)
+      .set({
+
+        studentUid: request.studentUid,
+        courseId,
+        courseName,
+        cgpa: student.cgpa,
+
+        approvedAt:
+          admin.firestore.FieldValue.serverTimestamp()
+
+      });
 
     await requestRef.update({
       status: "approved"
@@ -447,10 +551,18 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
       message: "Enrollment approved successfully"
     });
 
-  } catch (err) {
-    console.error("ENROLLMENT ERROR:", err);
-    res.status(500).json({ error: "Enrollment failed" });
   }
+
+  catch (err) {
+
+    console.error("ENROLLMENT ERROR:", err);
+
+    res.status(500).json({
+      error: "Enrollment failed"
+    });
+
+  }
+
 });
 
 
@@ -606,9 +718,7 @@ app.get("/users", verifyAdmin, async (req, res) => {
   res.json(users);
 });
 
-/* =========================
-   GET COURSES (ADMIN)
-========================= */
+
 /* =========================
    GET COURSES
 ========================= */
