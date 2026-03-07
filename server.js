@@ -1188,7 +1188,6 @@ app.post("/chatbot", async (req, res) => {
 
     console.log("USER ROLE:", role);
 
-
     /* GREETING */
 
     if (intent === "Greeting") {
@@ -1230,7 +1229,7 @@ app.post("/chatbot", async (req, res) => {
           .doc(courseId)
           .get();
 
-        const name = courseInfo.data()?.name || courseId;
+        const courseName = courseInfo.data()?.name || courseId;
 
         const t = data.totalClasses || 0;
         const a = data.attended || 0;
@@ -1241,7 +1240,7 @@ app.post("/chatbot", async (req, res) => {
         total += t;
         attended += a;
 
-        messages.push(`${name}`);
+        messages.push(`📘 ${courseName}`);
         messages.push(`Total Classes : ${t}`);
         messages.push(`Attended : ${a}`);
         messages.push(`Missed : ${m}`);
@@ -1261,27 +1260,99 @@ app.post("/chatbot", async (req, res) => {
     }
 
 
-    /* COURSES ENROLLED */
+    /* COURSE ATTENDANCE */
 
-    if (intent === "Courses_Enrolled") {
-
-      console.log("Courses_Enrolled intent triggered");
+    if (intent === "Attendance_course") {
 
       if (!requireStudent(res, role)) return;
 
-      const userDoc = await db.collection("users").doc(uid).get();
-      const data = userDoc.data();
+      const parameters = req.body.queryResult.parameters || {};
+      const courseInput = parameters.course || "";
 
-      if (!data.enrolledCourses || data.enrolledCourses.length === 0)
-        return sendReplies(res, ["You are not enrolled in any courses."]);
+      const course = await getCourseIdFromAlias(courseInput);
 
-      const messages = ["📚 Your Enrolled Courses"];
+      if (!course)
+        return sendReplies(res, ["I couldn't recognize that course."]);
 
-      data.enrolledCourses.forEach(course => {
-        messages.push(`• ${course}`);
+      const courseId = course.id;
+      const courseName = course.name;
+
+      const enrollmentSnap = await db
+        .collection("enrollments")
+        .doc(courseId)
+        .collection("students")
+        .doc(uid)
+        .get();
+
+      if (!enrollmentSnap.exists)
+        return sendReplies(res, [`You are not enrolled in ${courseName}`]);
+
+      const doc = await db
+        .collection("attendance_summary")
+        .doc(uid)
+        .collection("courses")
+        .doc(courseId)
+        .get();
+
+      if (!doc.exists)
+        return sendReplies(res, ["No attendance records found yet."]);
+
+      const data = doc.data();
+
+      const total = data.totalClasses || 0;
+      const attended = data.attended || 0;
+      const missed = total - attended;
+
+      const percent = total === 0 ? 0 : ((attended / total) * 100).toFixed(1);
+
+      return sendReplies(res, [
+        `📘 ${courseName}`,
+        `Total Classes : ${total}`,
+        `Attended : ${attended}`,
+        `Missed : ${missed}`,
+        `Attendance : ${percent}%`
+      ]);
+    }
+
+
+    /* ATTENDANCE WARNING */
+
+    if (intent === "Attendance_Warning") {
+
+      if (!requireStudent(res, role)) return;
+
+      const snap = await db
+        .collection("attendance_summary")
+        .doc(uid)
+        .collection("courses")
+        .get();
+
+      let total = 0;
+      let attended = 0;
+
+      snap.forEach(doc => {
+        const d = doc.data();
+        total += d.totalClasses || 0;
+        attended += d.attended || 0;
       });
 
-      return sendReplies(res, messages);
+      if (total === 0)
+        return sendReplies(res, ["No attendance records yet."]);
+
+      const percent = ((attended / total) * 100).toFixed(1);
+
+      if (percent < 75)
+        return sendReplies(res, [
+          "⚠️ Attendance Warning",
+          `Current Attendance : ${percent}%`,
+          "You are below the required 75%.",
+          "Attend upcoming classes."
+        ]);
+
+      return sendReplies(res, [
+        "✅ Attendance Safe",
+        `Current Attendance : ${percent}%`
+      ]);
     }
 
 
@@ -1306,10 +1377,13 @@ app.post("/chatbot", async (req, res) => {
         const data = doc.data();
         const courseId = doc.id;
 
-        const courseInfo = await db.collection("courses").doc(courseId).get();
+        const courseInfo =
+          await db.collection("courses").doc(courseId).get();
+
         const name = courseInfo.data()?.name || courseId;
 
-        const missed = (data.totalClasses || 0) - (data.attended || 0);
+        const missed =
+          (data.totalClasses || 0) - (data.attended || 0);
 
         totalMissed += missed;
 
@@ -1319,6 +1393,65 @@ app.post("/chatbot", async (req, res) => {
       messages.push(`Total Missed Classes : ${totalMissed}`);
 
       return sendReplies(res, messages);
+    }
+
+
+    /* COURSES ENROLLED */
+
+    if (intent === "Courses_Enrolled") {
+
+      if (!requireStudent(res, role)) return;
+
+      const userDoc = await db.collection("users").doc(uid).get();
+      const data = userDoc.data();
+
+      if (!data.enrolledCourses || data.enrolledCourses.length === 0)
+        return sendReplies(res, ["You are not enrolled in any courses."]);
+
+      const messages = ["📚 Your Enrolled Courses"];
+
+      data.enrolledCourses.forEach(course => {
+        messages.push(`• ${course}`);
+      });
+
+      return sendReplies(res, messages);
+    }
+
+
+    /* REMAINING BUNK */
+
+    if (intent === "Remaining_Bunk") {
+
+      if (!requireStudent(res, role)) return;
+
+      const snap = await db
+        .collection("attendance_summary")
+        .doc(uid)
+        .collection("courses")
+        .get();
+
+      let total = 0;
+      let attended = 0;
+
+      snap.forEach(doc => {
+        const d = doc.data();
+        total += d.totalClasses || 0;
+        attended += d.attended || 0;
+      });
+
+      const minAttendance = 0.75;
+      const remaining = Math.floor((attended / minAttendance) - total);
+
+      if (remaining <= 0)
+        return sendReplies(res, [
+          "⚠️ Attendance Limit Reached",
+          "You cannot miss any more classes."
+        ]);
+
+      return sendReplies(res, [
+        "📌 Remaining Bunks",
+        `You can miss ${remaining} more class(es).`
+      ]);
     }
 
 
@@ -1334,11 +1467,13 @@ app.post("/chatbot", async (req, res) => {
         .get();
 
       if (snap.empty)
-        return sendReplies(res, ["You have not submitted any enrollment requests."]);
+        return sendReplies(res, [
+          "You have not submitted any enrollment requests."
+        ]);
 
       const messages = ["📄 Enrollment Status"];
 
-      for (const doc of snap.docs) {
+      const promises = snap.docs.map(async doc => {
 
         const data = doc.data();
 
@@ -1347,12 +1482,17 @@ app.post("/chatbot", async (req, res) => {
           .doc(data.courseId)
           .get();
 
-        const courseName = courseDoc.exists
-          ? courseDoc.data().name
-          : data.courseId;
+        const name =
+          courseDoc.exists
+            ? courseDoc.data().name
+            : data.courseId;
 
-        messages.push(`${courseName} → ${data.status}`);
-      }
+        return `${name} → ${data.status}`;
+      });
+
+      const results = await Promise.all(promises);
+
+      results.forEach(r => messages.push(r));
 
       return sendReplies(res, messages);
     }
@@ -1363,14 +1503,54 @@ app.post("/chatbot", async (req, res) => {
     if (intent === "Default Fallback Intent") {
 
       const userMessage = req.body.queryResult.queryText;
-
       const aiReply = await askAI(userMessage);
 
       return sendReplies(res, [aiReply]);
     }
 
 
-    return sendReplies(res, ["Ask me about your attendance."]);
+    /* LECTURER COURSES */
+
+    if (intent === "Lecturer_Courses") {
+
+      if (!requireLecturer(res, role)) return;
+
+      const snap = await db
+        .collection("lecturer_courses")
+        .where("lecturerUid", "==", uid)
+        .get();
+
+      if (snap.empty)
+        return sendReplies(res, [
+          "You are not assigned to any courses."
+        ]);
+
+      const messages = ["📚 Your Assigned Courses"];
+
+      for (const doc of snap.docs) {
+
+        const data = doc.data();
+
+        const courseInfo =
+          await db.collection("courses")
+            .doc(data.courseId).get();
+
+        const name =
+          courseInfo.data()?.name || data.courseId;
+
+        messages.push(`${name}`);
+        messages.push(`Branch : ${data.branch}`);
+        messages.push(`Year : ${data.year}`);
+        messages.push(`Semester : ${data.semester}`);
+      }
+
+      return sendReplies(res, messages);
+    }
+
+
+    return sendReplies(res, [
+      "Ask me about your attendance."
+    ]);
 
   }
 
@@ -1378,11 +1558,13 @@ app.post("/chatbot", async (req, res) => {
 
     console.error("CHATBOT ERROR:", err);
 
-    return sendReplies(res, ["Something went wrong."]);
+    return sendReplies(res, [
+      "Something went wrong."
+    ]);
+
   }
 
 });
-
 
 
 
