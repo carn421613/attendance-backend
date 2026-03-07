@@ -609,20 +609,43 @@ app.get("/users", verifyAdmin, async (req, res) => {
 /* =========================
    GET COURSES (ADMIN)
 ========================= */
+/* =========================
+   GET COURSES
+========================= */
 
-app.get("/courses", verifyAdmin, async (req, res) => {
+app.get("/courses", async (req, res) => {
 
-  const snap = await db.collection("courses").get();
+  try {
 
-  const courses = [];
+    const snap = await db.collection("courses").get();
 
-  snap.forEach(doc => {
-    courses.push(doc.data());
-  });
+    const courses = [];
 
-  res.json(courses);
+    snap.forEach(doc => {
+
+      courses.push({
+        id: doc.id,
+        ...doc.data()
+      });
+
+    });
+
+    res.json(courses);
+
+  }
+
+  catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({
+      error: err.message
+    });
+
+  }
 
 });
+
 /* =========================
    DELETE USER (ADMIN)
 ========================= */
