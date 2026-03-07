@@ -564,8 +564,6 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
   }
 
 });
-
-
 /* =========================
    CREATE STUDENT (ADMIN)
 ========================= */
@@ -582,44 +580,73 @@ app.post("/create-student", verifyAdmin, async (req, res) => {
       });
     }
 
-    /* CHECK IF EMAIL ALREADY EXISTS */
+    const cleanName = name.trim().toLowerCase();
+    const cleanEmail = email.trim().toLowerCase();
 
-    try {
 
-      await admin.auth().getUserByEmail(email);
+    /* =========================
+       CHECK FIRESTORE DUPLICATE
+    ========================= */
 
+    const existingUser = await db
+      .collection("users")
+      .where("email", "==", cleanEmail)
+      .get();
+
+    if (!existingUser.empty) {
       return res.status(400).json({
-        error: "Student already exists with this email"
+        error: "User already exists with this email"
       });
-
     }
 
-    catch (err) {
 
-      if (err.code !== "auth/user-not-found") {
-        throw err;
-      }
+    /* =========================
+       CHECK NAME + EMAIL
+    ========================= */
 
+    const duplicateCombo = await db
+      .collection("users")
+      .where("name", "==", cleanName)
+      .where("email", "==", cleanEmail)
+      .get();
+
+    if (!duplicateCombo.empty) {
+      return res.status(400).json({
+        error: "Duplicate user detected"
+      });
     }
 
-    /* CREATE USER */
+
+    /* =========================
+       CREATE FIREBASE AUTH USER
+    ========================= */
 
     const user = await admin.auth().createUser({
-      email
+      email: cleanEmail
     });
+
+
+    /* =========================
+       STORE IN USERS COLLECTION
+    ========================= */
 
     await db.collection("users").doc(user.uid).set({
 
-      name,
-      email,
+      name: cleanName,
+      email: cleanEmail,
       role: "student",
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
+
+      createdAt:
+        admin.firestore.FieldValue.serverTimestamp()
 
     });
 
-    const link = await admin.auth().generatePasswordResetLink(email);
+
+    const link =
+      await admin.auth().generatePasswordResetLink(cleanEmail);
 
     console.log("PASSWORD RESET LINK:", link);
+
 
     res.json({
       message: "Student created successfully"
@@ -638,6 +665,8 @@ app.post("/create-student", verifyAdmin, async (req, res) => {
   }
 
 });
+
+
 /* =========================
    CREATE LECTURER (ADMIN)
 ========================= */
@@ -654,42 +683,70 @@ app.post("/create-lecturer", verifyAdmin, async (req, res) => {
       });
     }
 
-    /* CHECK IF EMAIL ALREADY EXISTS */
+    const cleanName = name.trim().toLowerCase();
+    const cleanEmail = email.trim().toLowerCase();
 
-    try {
 
-      await admin.auth().getUserByEmail(email);
+    /* =========================
+       CHECK FIRESTORE DUPLICATE
+    ========================= */
 
+    const existingUser = await db
+      .collection("users")
+      .where("email", "==", cleanEmail)
+      .get();
+
+    if (!existingUser.empty) {
       return res.status(400).json({
-        error: "Lecturer already exists with this email"
+        error: "User already exists with this email"
       });
-
     }
 
-    catch (err) {
 
-      if (err.code !== "auth/user-not-found") {
-        throw err;
-      }
+    /* =========================
+       CHECK NAME + EMAIL
+    ========================= */
 
+    const duplicateCombo = await db
+      .collection("users")
+      .where("name", "==", cleanName)
+      .where("email", "==", cleanEmail)
+      .get();
+
+    if (!duplicateCombo.empty) {
+      return res.status(400).json({
+        error: "Duplicate user detected"
+      });
     }
 
-    /* CREATE USER */
+
+    /* =========================
+       CREATE AUTH USER
+    ========================= */
 
     const user = await admin.auth().createUser({
-      email
+      email: cleanEmail
     });
+
+
+    /* =========================
+       STORE IN USERS COLLECTION
+    ========================= */
 
     await db.collection("users").doc(user.uid).set({
 
-      name,
-      email,
+      name: cleanName,
+      email: cleanEmail,
       role: "lecturer",
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
+
+      createdAt:
+        admin.firestore.FieldValue.serverTimestamp()
 
     });
 
-    await admin.auth().generatePasswordResetLink(email);
+
+    await admin.auth().generatePasswordResetLink(cleanEmail);
+
 
     res.json({
       message: "Lecturer created successfully"
@@ -708,7 +765,8 @@ app.post("/create-lecturer", verifyAdmin, async (req, res) => {
   }
 
 });
-/* =========================
+
+/* ========================
    GET USERS (ADMIN)
 ========================= */
 app.get("/users", verifyAdmin, async (req, res) => {
