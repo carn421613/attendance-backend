@@ -775,9 +775,9 @@ app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
 
   try {
 
-    const { lecturerUid, year, semester, course } = req.body;
+    const { lecturerUid, branch, academicYear, year, semester, course } = req.body;
 
-    if (!lecturerUid || !year || !semester || !course) {
+    if (!lecturerUid || !branch || !academicYear || !year || !semester || !course) {
       return res.status(400).json({ error: "Missing fields" });
     }
 
@@ -803,15 +803,17 @@ app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
     const courseName = courseDoc.data().name;
 
     /* =========================
-       FIND LECTURER ASSIGNMENT
+       VERIFY LECTURER ASSIGNMENT
     ========================= */
 
     const assignSnap = await db
       .collection("lecturer_assignments")
       .where("lecturerUid", "==", lecturerUid)
       .where("courseId", "==", courseId)
+      .where("branch", "==", branch)
       .where("year", "==", year)
       .where("semester", "==", semester)
+      .where("academicYear", "==", academicYear)
       .get();
 
     if (assignSnap.empty) {
@@ -819,10 +821,6 @@ app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
         error: "Lecturer not assigned to this class"
       });
     }
-
-    const assignment = assignSnap.docs[0].data();
-
-    const { branch, academicYear } = assignment;
 
     /* =========================
        CREATE CLASS ID
@@ -843,20 +841,25 @@ app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
     });
 
     /* =========================
-       CREATE SESSION
+       CREATE ATTENDANCE SESSION
     ========================= */
 
     const sessionRef = await db.collection("attendance_sessions").add({
 
       lecturerUid,
+
       courseId,
-      courseName,
+      course: courseName,
+
       branch,
       year,
       semester,
       academicYear,
+
       classId,
+
       classPhotoUrl: result.secure_url,
+
       createdAt: admin.firestore.FieldValue.serverTimestamp()
 
     });
@@ -864,7 +867,7 @@ app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
     const sessionId = sessionRef.id;
 
     /* =========================
-       CALL PYTHON SERVICE
+       CALL FACE SERVICE
     ========================= */
 
     callFaceService(
@@ -872,7 +875,13 @@ app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
       {
         groupPhoto: result.secure_url,
         classId: classId,
-        sessionId: sessionId
+        sessionId: sessionId,
+
+        courseId,
+        course: courseName,
+        lecturerUid,
+        year,
+        semester
       }
     ).catch(() => { });
 
@@ -1273,18 +1282,19 @@ function requireLecturer(res, role) {
 }
 function sendReply(res, messages) {
 
-  let text = "";
+  // If single message, convert to array
+  if (!Array.isArray(messages)) {
+    messages = [messages];
+  }
 
-  // If multiple lines/messages are passed
-  if (Array.isArray(messages)) {
-    text = messages.join("\n\n");   // double line break for clean spacing
-  }
-  else {
-    text = messages;
-  }
+  const fulfillmentMessages = messages.map(m => ({
+    text: {
+      text: [m]
+    }
+  }));
 
   return res.json({
-    fulfillmentText: text
+    fulfillmentMessages
   });
 
 }
@@ -1961,13 +1971,7 @@ app.post("/chatbot", async (req, res) => {
       }
 
     }
-    /* =========================
-       TOTAL ENROLLED STUDENTS
-    ========================= */
 
-    /* =========================
-   TOTAL STRENGTH (ALL COURSES)
-========================= */
 
 /* =========================
    TOTAL CLASS STRENGTH
@@ -1977,7 +1981,8 @@ app.post("/chatbot", async (req, res) => {
    TOTAL CLASS STRENGTH
 ========================= */
 
-if (intent === "Lecturer_Total_Strength") {
+
+if (intent === "Total_Enrolled_Students") {
 
   console.log("Lecturer_Total_Strength intent triggered");
 
@@ -1994,18 +1999,13 @@ if (intent === "Lecturer_Total_Strength") {
 
       return sendReply(res, [
         "📊 Total Class Strength",
-        "",
         "You are not assigned to any classes."
       ]);
 
     }
 
     let totalStudents = 0;
-
-    const messages = [
-      "📊 Total Class Strength",
-      ""
-    ];
+    const messages = ["📊 Total Class Strength"];
 
     for (const doc of assignSnap.docs) {
 
@@ -2038,7 +2038,7 @@ if (intent === "Lecturer_Total_Strength") {
       messages.push(`Year : ${year}`);
       messages.push(`Semester : ${semester}`);
       messages.push(`Students : ${count}`);
-      messages.push("");
+      
 
     }
 
@@ -2059,10 +2059,7 @@ if (intent === "Lecturer_Total_Strength") {
   }
 
 }
-
-    /* =========================
-   COURSE STRENGTH
-========================= */
+   
 /* =========================
    PARTICULAR COURSE STRENGTH
 ========================= */
@@ -2105,12 +2102,11 @@ if (intent === "Lecturer_Course_Strength") {
 
     }
 
-    const messages = [
-      `📊 ${courseName} Class Strength`,
-      ""
-    ];
-
     let total = 0;
+
+    const messages = [
+      `📊 ${courseName} Class Strength`
+    ];
 
     for (const doc of assignSnap.docs) {
 
@@ -2140,7 +2136,7 @@ if (intent === "Lecturer_Course_Strength") {
       messages.push(`Year : ${year}`);
       messages.push(`Semester : ${semester}`);
       messages.push(`Students : ${count}`);
-      messages.push("");
+      messages.push("-------------------");
 
     }
 
@@ -2157,6 +2153,432 @@ if (intent === "Lecturer_Course_Strength") {
     return sendReply(res, [
       "Sorry, I couldn't retrieve the course strength."
     ]);
+
+  }
+
+}
+
+
+/* =========================
+   LOW ATTENDANCE STUDENTS
+========================= */
+
+if (intent === "Lecturer_Low_Attendance") {
+
+  console.log("Lecturer_Low_Attendance triggered");
+
+  if (!requireLecturer(res, role)) return;
+
+  try {
+
+    const assignSnap = await db
+      .collection("lecturer_assignments")
+      .where("lecturerUid", "==", uid)
+      .get();
+
+    const messages = ["⚠️ Students Below 75%"];
+
+    for (const doc of assignSnap.docs) {
+
+      const data = doc.data();
+
+      const classId =
+        `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
+
+      const analytics = await db
+        .collection("class_analytics")
+        .doc(classId)
+        .get();
+
+      if (!analytics.exists) continue;
+
+      const students =
+        analytics.data().lowAttendanceStudents || [];
+
+      if (students.length === 0) continue;
+
+      messages.push(`📘 ${data.courseName}`);
+
+      students.forEach(s =>
+        messages.push(`${s.name} → ${s.percent.toFixed(1)}%`)
+      );
+    }
+
+    return sendReply(res, messages);
+
+  }
+
+  catch (error) {
+
+    console.error(error);
+
+    return sendReply(res, ["Error retrieving low attendance"]);
+
+  }
+
+}
+
+/* =========================
+   HIGH ATTENDANCE STUDENTS
+========================= */
+
+if (intent === "Lecturer_High_Attendance") {
+
+  console.log("Lecturer_High_Attendance triggered");
+
+  if (!requireLecturer(res, role)) return;
+
+  try {
+
+    const assignSnap = await db
+      .collection("lecturer_assignments")
+      .where("lecturerUid", "==", uid)
+      .get();
+
+    const messages = ["🏆 High Attendance Students"];
+
+    for (const doc of assignSnap.docs) {
+
+      const data = doc.data();
+
+      const classId =
+        `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
+
+      const analytics = await db
+        .collection("class_analytics")
+        .doc(classId)
+        .get();
+
+      if (!analytics.exists) continue;
+
+      const students =
+        analytics.data().highAttendanceStudents || [];
+
+      messages.push(`📘 ${data.courseName}`);
+
+      students.slice(0,5).forEach(s =>
+        messages.push(`${s.name} → ${s.percent.toFixed(1)}%`)
+      );
+    }
+
+    return sendReply(res, messages);
+
+  }
+
+  catch (error) {
+
+    console.error(error);
+
+    return sendReply(res, ["Error retrieving high attendance"]);
+
+  }
+
+}
+
+
+/* =========================
+   CLASS AVERAGE ATTENDANCE
+========================= */
+
+if (intent === "Lecturer_Class_Average") {
+
+  console.log("Lecturer_Class_Average triggered");
+
+  if (!requireLecturer(res, role)) return;
+
+  try {
+
+    const assignSnap = await db
+      .collection("lecturer_assignments")
+      .where("lecturerUid", "==", uid)
+      .get();
+
+    const messages = ["📊 Class Average Attendance"];
+
+    for (const doc of assignSnap.docs) {
+
+      const data = doc.data();
+
+      const classId =
+        `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
+
+      const analytics = await db
+        .collection("class_analytics")
+        .doc(classId)
+        .get();
+
+      if (!analytics.exists) continue;
+
+      const avg =
+        analytics.data().classAverageAttendance || 0;
+
+      messages.push(`${data.courseName} → ${avg.toFixed(1)}%`);
+    }
+
+    return sendReply(res, messages);
+
+  }
+
+  catch (error) {
+
+    console.error(error);
+
+    return sendReply(res, ["Error retrieving average attendance"]);
+
+  }
+
+}
+
+/* =========================
+   TOTAL SESSIONS
+========================= */
+
+if (intent === "Lecturer_Total_Sessions") {
+
+  console.log("Lecturer_Total_Sessions triggered");
+
+  if (!requireLecturer(res, role)) return;
+
+  try {
+
+    const assignSnap = await db
+      .collection("lecturer_assignments")
+      .where("lecturerUid", "==", uid)
+      .get();
+
+    const messages = ["📅 Total Classes Conducted"];
+
+    for (const doc of assignSnap.docs) {
+
+      const data = doc.data();
+
+      const classId =
+        `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
+
+      const analytics = await db
+        .collection("class_analytics")
+        .doc(classId)
+        .get();
+
+      if (!analytics.exists) continue;
+
+      const sessions =
+        analytics.data().totalSessions || 0;
+
+      messages.push(`${data.courseName} → ${sessions} classes`);
+    }
+
+    return sendReply(res, messages);
+
+  }
+
+  catch (error) {
+
+    console.error(error);
+
+    return sendReply(res, ["Error retrieving sessions"]);
+
+  }
+
+}
+
+
+/* =========================
+   HIGHEST ATTENDANCE CLASS
+========================= */
+
+if (intent === "Lecturer_Highest_Attendance_Class") {
+
+  console.log("Lecturer_Highest_Attendance_Class triggered");
+
+  if (!requireLecturer(res, role)) return;
+
+  try {
+
+    const assignSnap = await db
+      .collection("lecturer_assignments")
+      .where("lecturerUid", "==", uid)
+      .get();
+
+    if (assignSnap.empty) {
+      return sendReply(res, ["You are not assigned to any classes."]);
+    }
+
+    let highestCourse = "";
+    let highestPercent = 0;
+
+    for (const doc of assignSnap.docs) {
+
+      const data = doc.data();
+
+      const classId =
+        `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
+
+      const analytics = await db
+        .collection("class_analytics")
+        .doc(classId)
+        .get();
+
+      if (!analytics.exists) continue;
+
+      const avg =
+        analytics.data().classAverageAttendance || 0;
+
+      if (avg > highestPercent) {
+        highestPercent = avg;
+        highestCourse = data.courseName;
+      }
+
+    }
+
+    return sendReply(res, [
+      "📈 Highest Attendance Class",
+      `${highestCourse} → ${highestPercent.toFixed(1)}%`
+    ]);
+
+  }
+
+  catch (error) {
+
+    console.error(error);
+
+    return sendReply(res, ["Error retrieving highest attendance"]);
+
+  }
+
+}
+
+
+/* =========================
+   LOWEST ATTENDANCE CLASS
+========================= */
+
+if (intent === "Lecturer_Lowest_Attendance_Class") {
+
+  console.log("Lecturer_Lowest_Attendance_Class triggered");
+
+  if (!requireLecturer(res, role)) return;
+
+  try {
+
+    const assignSnap = await db
+      .collection("lecturer_assignments")
+      .where("lecturerUid", "==", uid)
+      .get();
+
+    if (assignSnap.empty) {
+      return sendReply(res, ["You are not assigned to any classes."]);
+    }
+
+    let lowestCourse = "";
+    let lowestPercent = 100;
+
+    for (const doc of assignSnap.docs) {
+
+      const data = doc.data();
+
+      const classId =
+        `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
+
+      const analytics = await db
+        .collection("class_analytics")
+        .doc(classId)
+        .get();
+
+      if (!analytics.exists) continue;
+
+      const avg =
+        analytics.data().classAverageAttendance || 0;
+
+      if (avg < lowestPercent) {
+        lowestPercent = avg;
+        lowestCourse = data.courseName;
+      }
+
+    }
+
+    return sendReply(res, [
+      "📉 Lowest Attendance Class",
+      `${lowestCourse} → ${lowestPercent.toFixed(1)}%`
+    ]);
+
+  }
+
+  catch (error) {
+
+    console.error(error);
+
+    return sendReply(res, ["Error retrieving lowest attendance"]);
+
+  }
+
+}
+
+
+/* =========================
+   CLASS STRENGTH RANKING
+========================= */
+
+if (intent === "Lecturer_Class_Strength_Ranking") {
+
+  console.log("Lecturer_Class_Strength_Ranking triggered");
+
+  if (!requireLecturer(res, role)) return;
+
+  try {
+
+    const assignSnap = await db
+      .collection("lecturer_assignments")
+      .where("lecturerUid", "==", uid)
+      .get();
+
+    if (assignSnap.empty) {
+      return sendReply(res, ["You are not assigned to any classes."]);
+    }
+
+    const classes = [];
+
+    for (const doc of assignSnap.docs) {
+
+      const data = doc.data();
+
+      const classId =
+        `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
+
+      const analytics = await db
+        .collection("class_analytics")
+        .doc(classId)
+        .get();
+
+      if (!analytics.exists) continue;
+
+      const total =
+        analytics.data().totalStudents || 0;
+
+      classes.push({
+        course: data.courseName,
+        students: total
+      });
+
+    }
+
+    classes.sort((a, b) => b.students - a.students);
+
+    const messages = ["👨‍🎓 Class Strength Ranking"];
+
+    classes.forEach(c => {
+      messages.push(`${c.course} → ${c.students} students`);
+    });
+
+    return sendReply(res, messages);
+
+  }
+
+  catch (error) {
+
+    console.error(error);
+
+    return sendReply(res, ["Error retrieving class strength ranking"]);
 
   }
 
