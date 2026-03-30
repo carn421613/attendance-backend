@@ -2627,8 +2627,97 @@ app.post("/chatbot", async (req, res) => {
 
 
 
+/*===================
+STUDENT ANALYTICS
+===================================*/
 
+app.get("/student/analytics/:uid", async (req, res) => {
+  try {
+    const uid = req.params.uid;
 
+    // 1. Get enrolled courses
+    const enrollSnap = await db.collection("enrollment_requests")
+      .where("studentUid", "==", uid)
+      .where("status", "==", "approved")
+      .get();
+
+    const enrolledCourses = [];
+    enrollSnap.forEach(doc => {
+      enrolledCourses.push(doc.data().courseName);
+    });
+
+    // 2. Get attendance data (YOUR COLLECTION = courses ✅)
+    const snap = await db
+      .collection("attendance_summary")
+      .doc(uid)
+      .collection("courses")
+      .get();
+
+    let totalSessions = 0;
+    let totalAttended = 0;
+
+    const courseMap = {};
+
+    snap.forEach(doc => {
+      const courseId = doc.id;
+      const data = doc.data();
+
+      const sessions = data.totalClasses || 0;
+      const attended = data.attended || 0;
+
+      totalSessions += sessions;
+      totalAttended += attended;
+
+      if (!courseMap[courseId]) {
+        courseMap[courseId] = { total: 0, attended: 0 };
+      }
+
+      courseMap[courseId].total += sessions;
+      courseMap[courseId].attended += attended;
+    });
+
+    // 3. Convert to array
+    const courses = [];
+
+    // Attendance-based courses
+    for (const [name, stats] of Object.entries(courseMap)) {
+      const percent =
+        stats.total === 0 ? 0 : (stats.attended / stats.total) * 100;
+
+      courses.push({
+        name,
+        attendance: percent
+      });
+    }
+
+    // Add enrolled courses (even if no attendance)
+    const existing = courses.map(c => c.name.toLowerCase());
+
+    enrolledCourses.forEach(name => {
+      if (!existing.includes(name.toLowerCase())) {
+        courses.push({
+          name,
+          attendance: 0
+        });
+      }
+    });
+
+    // 4. Overall
+    const overallAttendance =
+      totalSessions === 0 ? 0 :
+      (totalAttended / totalSessions) * 100;
+
+    res.json({
+      courses,
+      overallAttendance,
+      totalSessions
+    });
+
+  } catch (err) {
+    console.error("STUDENT ANALYTICS ERROR:", err);
+    res.status(500).json({ error: "Failed" });
+  }
+});
 
 /* =========================
    START SERVER
