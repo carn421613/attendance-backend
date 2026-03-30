@@ -523,9 +523,48 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
 
 
 
+/*====================
+VIEW LECTURER ASSIGNMENTS
+===============*/
 
+app.get("/admin/assignments", async (req, res) => {
+  try {
 
+    const snap = await db.collection("lecturer_assignments").get();
 
+    const result = [];
+
+    for (const doc of snap.docs) {
+
+      const d = doc.data();
+
+      const classId = `${d.courseId}_${d.branch}_${d.year || d.currentYear}_${d.semester}_${d.academicYear}`;
+
+      let avg = 0;
+
+      const analytics = await db.collection("class_analytics").doc(classId).get();
+
+      if (analytics.exists) {
+        avg = analytics.data().classAverageAttendance || 0;
+      }
+
+      result.push({
+        lecturerName: d.lecturerName,
+        lecturerEmail: d.lecturerEmail,
+        courseId: d.courseId,
+        courseName: d.courseName,
+        year: d.year || d.currentYear,
+        semester: d.semester,
+        averageAttendance: avg
+      });
+    }
+
+    res.json(result);
+
+  } catch (err) {
+    res.status(500).json({ error: "Failed" });
+  }
+});
 
 
 
