@@ -2635,17 +2635,20 @@ app.get("/student/analytics/:uid", async (req, res) => {
   try {
     const uid = req.params.uid;
 
+    // 1️⃣ Get enrolled courses
     const enrollSnap = await db.collection("enrollment_requests")
       .where("studentUid", "==", uid)
       .where("status", "==", "approved")
       .get();
 
-    const enrolledMap = {};
+    const enrolledMap = {}; // courseId -> courseName
+
     enrollSnap.forEach(doc => {
       const d = doc.data();
       enrolledMap[d.courseId] = d.courseName;
     });
 
+    // 2️⃣ Get attendance data
     const snap = await db
       .collection("attendance_summary")
       .doc(uid)
@@ -2657,7 +2660,11 @@ app.get("/student/analytics/:uid", async (req, res) => {
     let totalAttended = 0;
 
     snap.forEach(doc => {
-      const courseId = doc.id;
+
+      // 🔥 IMPORTANT FIX: extract courseId
+      const fullId = doc.id;
+      const courseId = fullId.split("_")[0];
+
       const data = doc.data();
 
       const sessions = data.totalClasses || 0;
@@ -2666,12 +2673,15 @@ app.get("/student/analytics/:uid", async (req, res) => {
       totalSessions += sessions;
       totalAttended += attended;
 
-      courseStats[courseId] = {
-        total: sessions,
-        attended: attended
-      };
+      if (!courseStats[courseId]) {
+        courseStats[courseId] = { total: 0, attended: 0 };
+      }
+
+      courseStats[courseId].total += sessions;
+      courseStats[courseId].attended += attended;
     });
 
+    // 3️⃣ Merge enrolled + attendance
     const courses = [];
 
     for (const courseId in enrolledMap) {
@@ -2686,6 +2696,7 @@ app.get("/student/analytics/:uid", async (req, res) => {
       });
     }
 
+    // 4️⃣ Overall attendance
     const overallAttendance =
       totalSessions === 0 ? 0 :
       (totalAttended / totalSessions) * 100;
