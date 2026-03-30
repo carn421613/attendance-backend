@@ -2635,28 +2635,29 @@ app.get("/student/analytics/:uid", async (req, res) => {
   try {
     const uid = req.params.uid;
 
-    // 1. Get enrolled courses
+    // 1️⃣ Get enrolled courses (use courseId)
     const enrollSnap = await db.collection("enrollment_requests")
       .where("studentUid", "==", uid)
       .where("status", "==", "approved")
       .get();
 
-    const enrolledCourses = [];
+    const enrolledMap = {}; // courseId -> courseName
+
     enrollSnap.forEach(doc => {
-      enrolledCourses.push(doc.data().courseName);
+      const d = doc.data();
+      enrolledMap[d.courseId] = d.courseName; // store mapping
     });
 
-    // 2. Get attendance data (YOUR COLLECTION = courses ✅)
+    // 2️⃣ Get attendance data
     const snap = await db
       .collection("attendance_summary")
       .doc(uid)
       .collection("courses")
       .get();
 
+    const courseStats = {};
     let totalSessions = 0;
     let totalAttended = 0;
-
-    const courseMap = {};
 
     snap.forEach(doc => {
       const courseId = doc.id;
@@ -2668,41 +2669,29 @@ app.get("/student/analytics/:uid", async (req, res) => {
       totalSessions += sessions;
       totalAttended += attended;
 
-      if (!courseMap[courseId]) {
-        courseMap[courseId] = { total: 0, attended: 0 };
-      }
-
-      courseMap[courseId].total += sessions;
-      courseMap[courseId].attended += attended;
+      courseStats[courseId] = {
+        total: sessions,
+        attended: attended
+      };
     });
 
-    // 3. Convert to array
+    // 3️⃣ Merge BOTH (NO DUPLICATES 🔥)
     const courses = [];
 
-    // Attendance-based courses
-    for (const [name, stats] of Object.entries(courseMap)) {
+    for (const courseId in enrolledMap) {
+
+      const stats = courseStats[courseId] || { total: 0, attended: 0 };
+
       const percent =
         stats.total === 0 ? 0 : (stats.attended / stats.total) * 100;
 
       courses.push({
-        name,
+        name: enrolledMap[courseId], // CLEAN NAME
         attendance: percent
       });
     }
 
-    // Add enrolled courses (even if no attendance)
-    const existing = courses.map(c => c.name.toLowerCase());
-
-    enrolledCourses.forEach(name => {
-      if (!existing.includes(name.toLowerCase())) {
-        courses.push({
-          name,
-          attendance: 0
-        });
-      }
-    });
-
-    // 4. Overall
+    // 4️⃣ Overall
     const overallAttendance =
       totalSessions === 0 ? 0 :
       (totalAttended / totalSessions) * 100;
