@@ -1428,56 +1428,75 @@ app.post("/chatbot", async (req, res) => {
 
     if (intent === "Attendance_course") {
 
-      if (!requireStudent(res, role)) return;
+  if (!requireStudent(res, role)) return;
 
-      const parameters = req.body.queryResult.parameters || {};
-      const courseInput = parameters.course || "";
+  const parameters = req.body.queryResult.parameters || {};
+  const courseInput = parameters.course || "";
 
-      const course = await getCourseIdFromAlias(courseInput);
+  const course = await getCourseIdFromAlias(courseInput);
 
-      if (!course)
-        return sendReplies(res, ["I couldn't recognize that course."]);
+  if (!course)
+    return sendReplies(res, ["I couldn't recognize that course."]);
 
-      const courseId = course.id;
-      const courseName = course.name;
+  const courseId = course.id;
+  const courseName = course.name;
 
-      const enrollmentSnap = await db
-        .collection("enrollments")
-        .doc(courseId)
-        .collection("students")
-        .doc(uid)
-        .get();
+  // 🔥 STEP 1: Find student's class
+  const classesSnap = await db.collection("student_courses").get();
 
-      if (!enrollmentSnap.exists)
-        return sendReplies(res, [`You are not enrolled in ${courseName}`]);
+  let classIdFound = null;
 
-      const doc = await db
-        .collection("attendance_summary")
-        .doc(uid)
-        .collection("courses")
-        .doc(courseId)
-        .get();
+  for (const doc of classesSnap.docs) {
+    const classId = doc.id;
 
-      if (!doc.exists)
-        return sendReplies(res, ["No attendance records found yet."]);
+    // match courseId (AI132)
+    if (!classId.startsWith(courseId)) continue;
 
-      const data = doc.data();
+    // check if student exists inside
+    const studentDoc = await db
+      .collection("student_courses")
+      .doc(classId)
+      .collection("students")
+      .doc(uid)
+      .get();
 
-      const total = data.totalClasses || 0;
-      const attended = data.attended || 0;
-      const missed = total - attended;
-
-      const percent = total === 0 ? 0 : ((attended / total) * 100).toFixed(1);
-
-      return sendReplies(res, [
-        `📘 ${courseName}`,
-        `Total Classes : ${total}`,
-        `Attended : ${attended}`,
-        `Missed : ${missed}`,
-        `Attendance : ${percent}%`
-      ]);
+    if (studentDoc.exists) {
+      classIdFound = classId;
+      break;
     }
+  }
 
+  if (!classIdFound)
+    return sendReplies(res, [`You are not enrolled in ${courseName}`]);
+
+  // 🔥 STEP 2: Get attendance
+  const doc = await db
+    .collection("attendance_summary")
+    .doc(uid)
+    .collection("courses")
+    .doc(classIdFound)
+    .get();
+
+  if (!doc.exists)
+    return sendReplies(res, ["No attendance records found yet."]);
+
+  const data = doc.data();
+
+  const total = data.totalClasses || 0;
+  const attended = data.attended || 0;
+  const missed = total - attended;
+
+  const percent =
+    total === 0 ? 0 : ((attended / total) * 100).toFixed(1);
+
+  return sendReplies(res, [
+    `📘 ${courseName}`,
+    `Total Classes : ${total}`,
+    `Attended : ${attended}`,
+    `Missed : ${missed}`,
+    `Attendance : ${percent}%`
+  ]);
+}
 
     /* ATTENDANCE WARNING */
 
