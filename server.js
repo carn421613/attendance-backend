@@ -8,7 +8,7 @@ const multer = require("multer");
 const cloudinary = require("./cloudinary");
 const path = require("path");
 const app=express()
-const cors = require("cors");
+
 
 app.use(cors({
   origin: "*",   // allow ALL origins
