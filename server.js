@@ -1,3 +1,5 @@
+// ...existing code...
+// Route moved after app initialization
 require("dotenv").config();
 const admin = require("firebase-admin");
 const express = require("express");
@@ -1119,6 +1121,178 @@ app.get("/student/profile/:uid", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch profile" });
   }
 });
+
+/* ======================
+   GET STUDENT ANALYTICS
+====================== */
+app.get("/student/analytics/:uid", async (req, res) => {
+  try {
+    const uid = req.params.uid;
+
+    // 1. Fetch user profile for enrolled courses
+    const userDocRef = await db.collection("users").doc(uid).get();
+    const enrolledCourseNames = userDocRef.exists && userDocRef.data().enrolledCourses
+      ? userDocRef.data().enrolledCourses
+      : [];
+
+    // 2. Fetch attendance summary from the "classes" subcollection
+    const classesSnap = await db
+      .collection("attendance_summary")
+      .doc(uid)
+      .collection("classes")
+      .get();
+
+    let totalSessions = 0;
+    let totalAttended = 0;
+    
+    // Aggregate by courseName
+    const courseStats = {};
+
+    // 3. Process actual attendance data
+    for (const doc of classesSnap.docs) {
+      const classId = doc.id; // e.g., "CSC101_CS_2_4_2024"
+      const data = doc.data();
+      
+      // Extract courseId from classId
+      const courseId = classId.split('_')[0];
+
+      // Get readable course name
+      const courseInfo = await db.collection("courses").doc(courseId).get();
+      const courseName = courseInfo.exists && courseInfo.data().name ? courseInfo.data().name : courseId;
+      
+      const t = data.totalClasses || 0;
+      const a = data.attended || 0;
+      
+      totalSessions += t;
+      totalAttended += a;
+
+      if (!courseStats[courseName]) {
+        courseStats[courseName] = { total: 0, attended: 0 };
+      }
+      
+      courseStats[courseName].total += t;
+      courseStats[courseName].attended += a;
+    }
+    
+    const courses = [];
+    const processedCourseNames = new Set();
+    
+    // Convert aggregated stats into array format
+    for (const [courseName, stats] of Object.entries(courseStats)) {
+       const attendancePercent = stats.total === 0 ? 0 : (stats.attended / stats.total) * 100;
+       courses.push({
+         name: courseName,
+         attendance: attendancePercent
+       });
+       processedCourseNames.add(courseName.toLowerCase());
+    }
+
+    // 4. Add enrolled courses that have no attendance data yet
+    for (const courseName of enrolledCourseNames) {
+      if (!processedCourseNames.has(courseName.toLowerCase())) {
+        courses.push({
+          name: courseName,
+          attendance: 0
+        });
+      }
+    }
+
+    const overallAttendance = totalSessions === 0 ? 0 : (totalAttended / totalSessions) * 100;
+
+    res.json({
+      overallAttendance,
+      totalSessions,
+      courses
+    });
+  } catch (err) {
+    console.error("Error fetching student analytics:", err);
+    res.status(500).json({ error: "Failed to load analytics" });
+  }
+});
+
+/* ======================
+   GET LECTURER ANALYTICS
+====================== */
+app.get("/lecturer/analytics/:uid", async (req, res) => {
+  try {
+    const uid = req.params.uid;
+
+    // 1. Fetch all assigned classes for this lecturer
+    const assignmentsSnap = await db
+      .collection("lecturer_assignments")
+      .where("lecturerUid", "==", uid)
+      .get();
+
+    if (assignmentsSnap.empty) {
+      return res.json({
+        totalClassesTaught: 0,
+        totalStudentsAcrossClasses: 0,
+        overallAverageAttendance: 0,
+        classes: []
+      });
+    }
+
+    let totalClassesTaught = assignmentsSnap.size;
+    let totalStudentsAcrossClasses = 0;
+    let sumAverageAttendance = 0;
+    const classes = [];
+
+    // 2. Iterate over assignments to gather stats
+    for (const doc of assignmentsSnap.docs) {
+      const data = doc.data();
+      const { courseId, courseName, branch, year, semester, academicYear } = data;
+      const classId = `${courseId}_${branch}_${year}_${semester}_${academicYear}`;
+
+      let classTotalStudents = 0;
+      let classAverageAttendance = 0;
+      let classTotalSessions = 0;
+      
+      // Step A: Check class_analytics for pre-aggregated stats (if sessions exist)
+      const analyticsDoc = await db.collection("class_analytics").doc(classId).get();
+      if (analyticsDoc.exists) {
+        const analyticsData = analyticsDoc.data();
+        classTotalStudents = analyticsData.totalStudents || 0;
+        classAverageAttendance = analyticsData.classAverageAttendance || 0;
+        classTotalSessions = analyticsData.totalSessions || 0;
+      } else {
+        // Step B: If no sessions have happened yet, dynamically count students from enrolled list so UI doesn't say 0 students
+        const studentsSnap = await db
+          .collection("student_courses")
+          .doc(classId)
+          .collection("students")
+          .get();
+        classTotalStudents = studentsSnap.size;
+        classAverageAttendance = 0;
+        classTotalSessions = 0;
+      }
+      
+      totalStudentsAcrossClasses += classTotalStudents;
+      sumAverageAttendance += classAverageAttendance;
+
+      classes.push({
+        classId,
+        courseName,
+        branch,
+        semester,
+        totalStudents: classTotalStudents,
+        averageAttendance: classAverageAttendance,
+        totalSessions: classTotalSessions
+      });
+    }
+
+    const overallAverageAttendance = totalClassesTaught === 0 ? 0 : (sumAverageAttendance / totalClassesTaught);
+
+    res.json({
+      totalClassesTaught,
+      totalStudentsAcrossClasses,
+      overallAverageAttendance,
+      classes
+    });
+  } catch (err) {
+    console.error("Error fetching lecturer analytics:", err);
+    res.status(500).json({ error: "Failed to load lecturer analytics" });
+  }
+});
 /* =========================
    HELPER: GET ATTENDANCE FROM SESSIONS
 ========================= */
@@ -1187,8 +1361,6 @@ const courseAliases = {
   "data structures": "data structures"
 
 };
-
-
 /* =========================
    FIND COURSE ID FROM USER INPUT
 ========================= */
@@ -1973,616 +2145,616 @@ app.post("/chatbot", async (req, res) => {
     }
 
 
-/* =========================
-   TOTAL CLASS STRENGTH
-========================= */
+    /* =========================
+       TOTAL CLASS STRENGTH
+    ========================= */
 
-/* =========================
-   TOTAL CLASS STRENGTH
-========================= */
+    /* =========================
+       TOTAL CLASS STRENGTH
+    ========================= */
 
 
-if (intent === "Total_Enrolled_Students") {
+    if (intent === "Total_Enrolled_Students") {
 
-  console.log("Lecturer_Total_Strength intent triggered");
+      console.log("Lecturer_Total_Strength intent triggered");
 
-  if (!requireLecturer(res, role)) return;
+      if (!requireLecturer(res, role)) return;
 
-  try {
+      try {
 
-    const assignSnap = await db
-      .collection("lecturer_assignments")
-      .where("lecturerUid", "==", uid)
-      .get();
+        const assignSnap = await db
+          .collection("lecturer_assignments")
+          .where("lecturerUid", "==", uid)
+          .get();
 
-    if (assignSnap.empty) {
+        if (assignSnap.empty) {
 
-      return sendReply(res, [
-        "📊 Total Class Strength",
-        "You are not assigned to any classes."
-      ]);
+          return sendReply(res, [
+            "📊 Total Class Strength",
+            "You are not assigned to any classes."
+          ]);
 
-    }
+        }
 
-    let totalStudents = 0;
-    const messages = ["📊 Total Class Strength"];
+        let totalStudents = 0;
+        const messages = ["📊 Total Class Strength"];
 
-    for (const doc of assignSnap.docs) {
+        for (const doc of assignSnap.docs) {
 
-      const data = doc.data();
+          const data = doc.data();
 
-      const {
-        courseId,
-        courseName,
-        branch,
-        year,
-        semester,
-        academicYear
-      } = data;
+          const {
+            courseId,
+            courseName,
+            branch,
+            year,
+            semester,
+            academicYear
+          } = data;
 
-      const classId =
-        `${courseId}_${branch}_${year}_${semester}_${academicYear}`;
+          const classId =
+            `${courseId}_${branch}_${year}_${semester}_${academicYear}`;
 
-      const studentsSnap = await db
-        .collection("student_courses")
-        .doc(classId)
-        .collection("students")
-        .get();
+          const studentsSnap = await db
+            .collection("student_courses")
+            .doc(classId)
+            .collection("students")
+            .get();
 
-      const count = studentsSnap.size;
+          const count = studentsSnap.size;
 
-      totalStudents += count;
+          totalStudents += count;
 
-      messages.push(`📘 ${courseName}`);
-      messages.push(`Branch : ${branch}`);
-      messages.push(`Year : ${year}`);
-      messages.push(`Semester : ${semester}`);
-      messages.push(`Students : ${count}`);
-      
+          messages.push(`📘 ${courseName}`);
+          messages.push(`Branch : ${branch}`);
+          messages.push(`Year : ${year}`);
+          messages.push(`Semester : ${semester}`);
+          messages.push(`Students : ${count}`);
 
-    }
 
-    messages.push(`Total Students Across All Classes : ${totalStudents}`);
+        }
 
-    return sendReply(res, messages);
+        messages.push(`Total Students Across All Classes : ${totalStudents}`);
 
-  }
+        return sendReply(res, messages);
 
-  catch (error) {
+      }
 
-    console.error("Total strength error:", error);
+      catch (error) {
 
-    return sendReply(res, [
-      "Sorry, I couldn't calculate the total strength."
-    ]);
+        console.error("Total strength error:", error);
 
-  }
+        return sendReply(res, [
+          "Sorry, I couldn't calculate the total strength."
+        ]);
 
-}
-   
-/* =========================
-   PARTICULAR COURSE STRENGTH
-========================= */
-
-if (intent === "Lecturer_Course_Strength") {
-
-  console.log("Lecturer_Course_Strength intent triggered");
-
-  if (!requireLecturer(res, role)) return;
-
-  try {
-
-    const parameters = req.body.queryResult.parameters || {};
-    const courseInput = parameters.course || "";
-
-    const course = await getCourseIdFromAlias(courseInput);
-
-    if (!course) {
-
-      return sendReply(res, [
-        "I couldn't recognize that course."
-      ]);
-
-    }
-
-    const courseId = course.id;
-    const courseName = course.name;
-
-    const assignSnap = await db
-      .collection("lecturer_assignments")
-      .where("lecturerUid", "==", uid)
-      .where("courseId", "==", courseId)
-      .get();
-
-    if (assignSnap.empty) {
-
-      return sendReply(res, [
-        `You are not assigned to ${courseName}.`
-      ]);
-
-    }
-
-    let total = 0;
-
-    const messages = [
-      `📊 ${courseName} Class Strength`
-    ];
-
-    for (const doc of assignSnap.docs) {
-
-      const data = doc.data();
-
-      const {
-        branch,
-        year,
-        semester,
-        academicYear
-      } = data;
-
-      const classId =
-        `${courseId}_${branch}_${year}_${semester}_${academicYear}`;
-
-      const studentsSnap = await db
-        .collection("student_courses")
-        .doc(classId)
-        .collection("students")
-        .get();
-
-      const count = studentsSnap.size;
-
-      total += count;
-
-      messages.push(`Branch : ${branch}`);
-      messages.push(`Year : ${year}`);
-      messages.push(`Semester : ${semester}`);
-      messages.push(`Students : ${count}`);
-      messages.push("-------------------");
-
-    }
-
-    messages.push(`Total Students in ${courseName} : ${total}`);
-
-    return sendReply(res, messages);
-
-  }
-
-  catch (error) {
-
-    console.error("Course strength error:", error);
-
-    return sendReply(res, [
-      "Sorry, I couldn't retrieve the course strength."
-    ]);
-
-  }
-
-}
-
-
-/* =========================
-   LOW ATTENDANCE STUDENTS
-========================= */
-
-if (intent === "Lecturer_Low_Attendance") {
-
-  console.log("Lecturer_Low_Attendance triggered");
-
-  if (!requireLecturer(res, role)) return;
-
-  try {
-
-    const assignSnap = await db
-      .collection("lecturer_assignments")
-      .where("lecturerUid", "==", uid)
-      .get();
-
-    const messages = ["⚠️ Students Below 75%"];
-
-    for (const doc of assignSnap.docs) {
-
-      const data = doc.data();
-
-      const classId =
-        `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
-
-      const analytics = await db
-        .collection("class_analytics")
-        .doc(classId)
-        .get();
-
-      if (!analytics.exists) continue;
-
-      const students =
-        analytics.data().lowAttendanceStudents || [];
-
-      if (students.length === 0) continue;
-
-      messages.push(`📘 ${data.courseName}`);
-
-      students.forEach(s =>
-        messages.push(`${s.name} → ${s.percent.toFixed(1)}%`)
-      );
-    }
-
-    return sendReply(res, messages);
-
-  }
-
-  catch (error) {
-
-    console.error(error);
-
-    return sendReply(res, ["Error retrieving low attendance"]);
-
-  }
-
-}
-
-/* =========================
-   HIGH ATTENDANCE STUDENTS
-========================= */
-
-if (intent === "Lecturer_High_Attendance") {
-
-  console.log("Lecturer_High_Attendance triggered");
-
-  if (!requireLecturer(res, role)) return;
-
-  try {
-
-    const assignSnap = await db
-      .collection("lecturer_assignments")
-      .where("lecturerUid", "==", uid)
-      .get();
-
-    const messages = ["🏆 High Attendance Students"];
-
-    for (const doc of assignSnap.docs) {
-
-      const data = doc.data();
-
-      const classId =
-        `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
-
-      const analytics = await db
-        .collection("class_analytics")
-        .doc(classId)
-        .get();
-
-      if (!analytics.exists) continue;
-
-      const students =
-        analytics.data().highAttendanceStudents || [];
-
-      messages.push(`📘 ${data.courseName}`);
-
-      students.slice(0,5).forEach(s =>
-        messages.push(`${s.name} → ${s.percent.toFixed(1)}%`)
-      );
-    }
-
-    return sendReply(res, messages);
-
-  }
-
-  catch (error) {
-
-    console.error(error);
-
-    return sendReply(res, ["Error retrieving high attendance"]);
-
-  }
-
-}
-
-
-/* =========================
-   CLASS AVERAGE ATTENDANCE
-========================= */
-
-if (intent === "Lecturer_Class_Average") {
-
-  console.log("Lecturer_Class_Average triggered");
-
-  if (!requireLecturer(res, role)) return;
-
-  try {
-
-    const assignSnap = await db
-      .collection("lecturer_assignments")
-      .where("lecturerUid", "==", uid)
-      .get();
-
-    const messages = ["📊 Class Average Attendance"];
-
-    for (const doc of assignSnap.docs) {
-
-      const data = doc.data();
-
-      const classId =
-        `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
-
-      const analytics = await db
-        .collection("class_analytics")
-        .doc(classId)
-        .get();
-
-      if (!analytics.exists) continue;
-
-      const avg =
-        analytics.data().classAverageAttendance || 0;
-
-      messages.push(`${data.courseName} → ${avg.toFixed(1)}%`);
-    }
-
-    return sendReply(res, messages);
-
-  }
-
-  catch (error) {
-
-    console.error(error);
-
-    return sendReply(res, ["Error retrieving average attendance"]);
-
-  }
-
-}
-
-/* =========================
-   TOTAL SESSIONS
-========================= */
-
-if (intent === "Lecturer_Total_Sessions") {
-
-  console.log("Lecturer_Total_Sessions triggered");
-
-  if (!requireLecturer(res, role)) return;
-
-  try {
-
-    const assignSnap = await db
-      .collection("lecturer_assignments")
-      .where("lecturerUid", "==", uid)
-      .get();
-
-    const messages = ["📅 Total Classes Conducted"];
-
-    for (const doc of assignSnap.docs) {
-
-      const data = doc.data();
-
-      const classId =
-        `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
-
-      const analytics = await db
-        .collection("class_analytics")
-        .doc(classId)
-        .get();
-
-      if (!analytics.exists) continue;
-
-      const sessions =
-        analytics.data().totalSessions || 0;
-
-      messages.push(`${data.courseName} → ${sessions} classes`);
-    }
-
-    return sendReply(res, messages);
-
-  }
-
-  catch (error) {
-
-    console.error(error);
-
-    return sendReply(res, ["Error retrieving sessions"]);
-
-  }
-
-}
-
-
-/* =========================
-   HIGHEST ATTENDANCE CLASS
-========================= */
-
-if (intent === "Lecturer_Highest_Attendance_Class") {
-
-  console.log("Lecturer_Highest_Attendance_Class triggered");
-
-  if (!requireLecturer(res, role)) return;
-
-  try {
-
-    const assignSnap = await db
-      .collection("lecturer_assignments")
-      .where("lecturerUid", "==", uid)
-      .get();
-
-    if (assignSnap.empty) {
-      return sendReply(res, ["You are not assigned to any classes."]);
-    }
-
-    let highestCourse = "";
-    let highestPercent = 0;
-
-    for (const doc of assignSnap.docs) {
-
-      const data = doc.data();
-
-      const classId =
-        `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
-
-      const analytics = await db
-        .collection("class_analytics")
-        .doc(classId)
-        .get();
-
-      if (!analytics.exists) continue;
-
-      const avg =
-        analytics.data().classAverageAttendance || 0;
-
-      if (avg > highestPercent) {
-        highestPercent = avg;
-        highestCourse = data.courseName;
       }
 
     }
 
-    return sendReply(res, [
-      "📈 Highest Attendance Class",
-      `${highestCourse} → ${highestPercent.toFixed(1)}%`
-    ]);
+    /* =========================
+       PARTICULAR COURSE STRENGTH
+    ========================= */
 
-  }
+    if (intent === "Lecturer_Course_Strength") {
 
-  catch (error) {
+      console.log("Lecturer_Course_Strength intent triggered");
 
-    console.error(error);
+      if (!requireLecturer(res, role)) return;
 
-    return sendReply(res, ["Error retrieving highest attendance"]);
+      try {
 
-  }
+        const parameters = req.body.queryResult.parameters || {};
+        const courseInput = parameters.course || "";
 
-}
+        const course = await getCourseIdFromAlias(courseInput);
 
+        if (!course) {
 
-/* =========================
-   LOWEST ATTENDANCE CLASS
-========================= */
+          return sendReply(res, [
+            "I couldn't recognize that course."
+          ]);
 
-if (intent === "Lecturer_Lowest_Attendance_Class") {
+        }
 
-  console.log("Lecturer_Lowest_Attendance_Class triggered");
+        const courseId = course.id;
+        const courseName = course.name;
 
-  if (!requireLecturer(res, role)) return;
+        const assignSnap = await db
+          .collection("lecturer_assignments")
+          .where("lecturerUid", "==", uid)
+          .where("courseId", "==", courseId)
+          .get();
 
-  try {
+        if (assignSnap.empty) {
 
-    const assignSnap = await db
-      .collection("lecturer_assignments")
-      .where("lecturerUid", "==", uid)
-      .get();
+          return sendReply(res, [
+            `You are not assigned to ${courseName}.`
+          ]);
 
-    if (assignSnap.empty) {
-      return sendReply(res, ["You are not assigned to any classes."]);
-    }
+        }
 
-    let lowestCourse = "";
-    let lowestPercent = 100;
+        let total = 0;
 
-    for (const doc of assignSnap.docs) {
+        const messages = [
+          `📊 ${courseName} Class Strength`
+        ];
 
-      const data = doc.data();
+        for (const doc of assignSnap.docs) {
 
-      const classId =
-        `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
+          const data = doc.data();
 
-      const analytics = await db
-        .collection("class_analytics")
-        .doc(classId)
-        .get();
+          const {
+            branch,
+            year,
+            semester,
+            academicYear
+          } = data;
 
-      if (!analytics.exists) continue;
+          const classId =
+            `${courseId}_${branch}_${year}_${semester}_${academicYear}`;
 
-      const avg =
-        analytics.data().classAverageAttendance || 0;
+          const studentsSnap = await db
+            .collection("student_courses")
+            .doc(classId)
+            .collection("students")
+            .get();
 
-      if (avg < lowestPercent) {
-        lowestPercent = avg;
-        lowestCourse = data.courseName;
+          const count = studentsSnap.size;
+
+          total += count;
+
+          messages.push(`Branch : ${branch}`);
+          messages.push(`Year : ${year}`);
+          messages.push(`Semester : ${semester}`);
+          messages.push(`Students : ${count}`);
+          messages.push("-------------------");
+
+        }
+
+        messages.push(`Total Students in ${courseName} : ${total}`);
+
+        return sendReply(res, messages);
+
+      }
+
+      catch (error) {
+
+        console.error("Course strength error:", error);
+
+        return sendReply(res, [
+          "Sorry, I couldn't retrieve the course strength."
+        ]);
+
       }
 
     }
 
-    return sendReply(res, [
-      "📉 Lowest Attendance Class",
-      `${lowestCourse} → ${lowestPercent.toFixed(1)}%`
-    ]);
 
-  }
+    /* =========================
+       LOW ATTENDANCE STUDENTS
+    ========================= */
 
-  catch (error) {
+    if (intent === "Lecturer_Low_Attendance") {
 
-    console.error(error);
+      console.log("Lecturer_Low_Attendance triggered");
 
-    return sendReply(res, ["Error retrieving lowest attendance"]);
+      if (!requireLecturer(res, role)) return;
 
-  }
+      try {
 
-}
+        const assignSnap = await db
+          .collection("lecturer_assignments")
+          .where("lecturerUid", "==", uid)
+          .get();
 
+        const messages = ["⚠️ Students Below 75%"];
 
-/* =========================
-   CLASS STRENGTH RANKING
-========================= */
+        for (const doc of assignSnap.docs) {
 
-if (intent === "Lecturer_Class_Strength_Ranking") {
+          const data = doc.data();
 
-  console.log("Lecturer_Class_Strength_Ranking triggered");
+          const classId =
+            `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
 
-  if (!requireLecturer(res, role)) return;
+          const analytics = await db
+            .collection("class_analytics")
+            .doc(classId)
+            .get();
 
-  try {
+          if (!analytics.exists) continue;
 
-    const assignSnap = await db
-      .collection("lecturer_assignments")
-      .where("lecturerUid", "==", uid)
-      .get();
+          const students =
+            analytics.data().lowAttendanceStudents || [];
 
-    if (assignSnap.empty) {
-      return sendReply(res, ["You are not assigned to any classes."]);
-    }
+          if (students.length === 0) continue;
 
-    const classes = [];
+          messages.push(`📘 ${data.courseName}`);
 
-    for (const doc of assignSnap.docs) {
+          students.forEach(s =>
+            messages.push(`${s.name} → ${s.percent.toFixed(1)}%`)
+          );
+        }
 
-      const data = doc.data();
+        return sendReply(res, messages);
 
-      const classId =
-        `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
+      }
 
-      const analytics = await db
-        .collection("class_analytics")
-        .doc(classId)
-        .get();
+      catch (error) {
 
-      if (!analytics.exists) continue;
+        console.error(error);
 
-      const total =
-        analytics.data().totalStudents || 0;
+        return sendReply(res, ["Error retrieving low attendance"]);
 
-      classes.push({
-        course: data.courseName,
-        students: total
-      });
+      }
 
     }
 
-    classes.sort((a, b) => b.students - a.students);
+    /* =========================
+       HIGH ATTENDANCE STUDENTS
+    ========================= */
 
-    const messages = ["👨‍🎓 Class Strength Ranking"];
+    if (intent === "Lecturer_High_Attendance") {
 
-    classes.forEach(c => {
-      messages.push(`${c.course} → ${c.students} students`);
-    });
+      console.log("Lecturer_High_Attendance triggered");
 
-    return sendReply(res, messages);
+      if (!requireLecturer(res, role)) return;
 
-  }
+      try {
 
-  catch (error) {
+        const assignSnap = await db
+          .collection("lecturer_assignments")
+          .where("lecturerUid", "==", uid)
+          .get();
 
-    console.error(error);
+        const messages = ["🏆 High Attendance Students"];
 
-    return sendReply(res, ["Error retrieving class strength ranking"]);
+        for (const doc of assignSnap.docs) {
 
-  }
+          const data = doc.data();
 
-}
+          const classId =
+            `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
+
+          const analytics = await db
+            .collection("class_analytics")
+            .doc(classId)
+            .get();
+
+          if (!analytics.exists) continue;
+
+          const students =
+            analytics.data().highAttendanceStudents || [];
+
+          messages.push(`📘 ${data.courseName}`);
+
+          students.slice(0, 5).forEach(s =>
+            messages.push(`${s.name} → ${s.percent.toFixed(1)}%`)
+          );
+        }
+
+        return sendReply(res, messages);
+
+      }
+
+      catch (error) {
+
+        console.error(error);
+
+        return sendReply(res, ["Error retrieving high attendance"]);
+
+      }
+
+    }
+
+
+    /* =========================
+       CLASS AVERAGE ATTENDANCE
+    ========================= */
+
+    if (intent === "Lecturer_Class_Average") {
+
+      console.log("Lecturer_Class_Average triggered");
+
+      if (!requireLecturer(res, role)) return;
+
+      try {
+
+        const assignSnap = await db
+          .collection("lecturer_assignments")
+          .where("lecturerUid", "==", uid)
+          .get();
+
+        const messages = ["📊 Class Average Attendance"];
+
+        for (const doc of assignSnap.docs) {
+
+          const data = doc.data();
+
+          const classId =
+            `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
+
+          const analytics = await db
+            .collection("class_analytics")
+            .doc(classId)
+            .get();
+
+          if (!analytics.exists) continue;
+
+          const avg =
+            analytics.data().classAverageAttendance || 0;
+
+          messages.push(`${data.courseName} → ${avg.toFixed(1)}%`);
+        }
+
+        return sendReply(res, messages);
+
+      }
+
+      catch (error) {
+
+        console.error(error);
+
+        return sendReply(res, ["Error retrieving average attendance"]);
+
+      }
+
+    }
+
+    /* =========================
+       TOTAL SESSIONS
+    ========================= */
+
+    if (intent === "Lecturer_Total_Sessions") {
+
+      console.log("Lecturer_Total_Sessions triggered");
+
+      if (!requireLecturer(res, role)) return;
+
+      try {
+
+        const assignSnap = await db
+          .collection("lecturer_assignments")
+          .where("lecturerUid", "==", uid)
+          .get();
+
+        const messages = ["📅 Total Classes Conducted"];
+
+        for (const doc of assignSnap.docs) {
+
+          const data = doc.data();
+
+          const classId =
+            `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
+
+          const analytics = await db
+            .collection("class_analytics")
+            .doc(classId)
+            .get();
+
+          if (!analytics.exists) continue;
+
+          const sessions =
+            analytics.data().totalSessions || 0;
+
+          messages.push(`${data.courseName} → ${sessions} classes`);
+        }
+
+        return sendReply(res, messages);
+
+      }
+
+      catch (error) {
+
+        console.error(error);
+
+        return sendReply(res, ["Error retrieving sessions"]);
+
+      }
+
+    }
+
+
+    /* =========================
+       HIGHEST ATTENDANCE CLASS
+    ========================= */
+
+    if (intent === "Lecturer_Highest_Attendance_Class") {
+
+      console.log("Lecturer_Highest_Attendance_Class triggered");
+
+      if (!requireLecturer(res, role)) return;
+
+      try {
+
+        const assignSnap = await db
+          .collection("lecturer_assignments")
+          .where("lecturerUid", "==", uid)
+          .get();
+
+        if (assignSnap.empty) {
+          return sendReply(res, ["You are not assigned to any classes."]);
+        }
+
+        let highestCourse = "";
+        let highestPercent = 0;
+
+        for (const doc of assignSnap.docs) {
+
+          const data = doc.data();
+
+          const classId =
+            `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
+
+          const analytics = await db
+            .collection("class_analytics")
+            .doc(classId)
+            .get();
+
+          if (!analytics.exists) continue;
+
+          const avg =
+            analytics.data().classAverageAttendance || 0;
+
+          if (avg > highestPercent) {
+            highestPercent = avg;
+            highestCourse = data.courseName;
+          }
+
+        }
+
+        return sendReply(res, [
+          "📈 Highest Attendance Class",
+          `${highestCourse} → ${highestPercent.toFixed(1)}%`
+        ]);
+
+      }
+
+      catch (error) {
+
+        console.error(error);
+
+        return sendReply(res, ["Error retrieving highest attendance"]);
+
+      }
+
+    }
+
+
+    /* =========================
+       LOWEST ATTENDANCE CLASS
+    ========================= */
+
+    if (intent === "Lecturer_Lowest_Attendance_Class") {
+
+      console.log("Lecturer_Lowest_Attendance_Class triggered");
+
+      if (!requireLecturer(res, role)) return;
+
+      try {
+
+        const assignSnap = await db
+          .collection("lecturer_assignments")
+          .where("lecturerUid", "==", uid)
+          .get();
+
+        if (assignSnap.empty) {
+          return sendReply(res, ["You are not assigned to any classes."]);
+        }
+
+        let lowestCourse = "";
+        let lowestPercent = 100;
+
+        for (const doc of assignSnap.docs) {
+
+          const data = doc.data();
+
+          const classId =
+            `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
+
+          const analytics = await db
+            .collection("class_analytics")
+            .doc(classId)
+            .get();
+
+          if (!analytics.exists) continue;
+
+          const avg =
+            analytics.data().classAverageAttendance || 0;
+
+          if (avg < lowestPercent) {
+            lowestPercent = avg;
+            lowestCourse = data.courseName;
+          }
+
+        }
+
+        return sendReply(res, [
+          "📉 Lowest Attendance Class",
+          `${lowestCourse} → ${lowestPercent.toFixed(1)}%`
+        ]);
+
+      }
+
+      catch (error) {
+
+        console.error(error);
+
+        return sendReply(res, ["Error retrieving lowest attendance"]);
+
+      }
+
+    }
+
+
+    /* =========================
+       CLASS STRENGTH RANKING
+    ========================= */
+
+    if (intent === "Lecturer_Class_Strength_Ranking") {
+
+      console.log("Lecturer_Class_Strength_Ranking triggered");
+
+      if (!requireLecturer(res, role)) return;
+
+      try {
+
+        const assignSnap = await db
+          .collection("lecturer_assignments")
+          .where("lecturerUid", "==", uid)
+          .get();
+
+        if (assignSnap.empty) {
+          return sendReply(res, ["You are not assigned to any classes."]);
+        }
+
+        const classes = [];
+
+        for (const doc of assignSnap.docs) {
+
+          const data = doc.data();
+
+          const classId =
+            `${data.courseId}_${data.branch}_${data.year}_${data.semester}_${data.academicYear}`;
+
+          const analytics = await db
+            .collection("class_analytics")
+            .doc(classId)
+            .get();
+
+          if (!analytics.exists) continue;
+
+          const total =
+            analytics.data().totalStudents || 0;
+
+          classes.push({
+            course: data.courseName,
+            students: total
+          });
+
+        }
+
+        classes.sort((a, b) => b.students - a.students);
+
+        const messages = ["👨‍🎓 Class Strength Ranking"];
+
+        classes.forEach(c => {
+          messages.push(`${c.course} → ${c.students} students`);
+        });
+
+        return sendReply(res, messages);
+
+      }
+
+      catch (error) {
+
+        console.error(error);
+
+        return sendReply(res, ["Error retrieving class strength ranking"]);
+
+      }
+
+    }
 
     return sendReplies(res, [
       "Ask me about your attendance."
@@ -2603,6 +2775,110 @@ if (intent === "Lecturer_Class_Strength_Ranking") {
 });
 
 
+
+/* =========================
+   ADMIN ANALYTICS (DASHBOARD)
+========================= */
+
+app.get("/admin/analytics", verifyAdmin, async (req, res) => {
+  try {
+    const stats = {
+      totalUsers: 0,
+      totalStudents: 0,
+      totalLecturers: 0,
+      totalCourses: 0,
+      classesAnalytics: []
+    };
+
+    // 1. Get user counts
+    const usersSnap = await db.collection("users").get();
+    stats.totalUsers = usersSnap.size;
+    usersSnap.forEach(doc => {
+      const data = doc.data();
+      if (data.role === "student") stats.totalStudents++;
+      else if (data.role === "lecturer") stats.totalLecturers++;
+    });
+
+    // 2. Get total courses
+    const coursesSnap = await db.collection("courses").get();
+    stats.totalCourses = coursesSnap.size;
+
+    // 3. Get class analytics
+    const analyticsSnap = await db.collection("class_analytics").get();
+    analyticsSnap.forEach(doc => {
+      stats.classesAnalytics.push({
+        classId: doc.id,
+        ...doc.data()
+      });
+    });
+
+    res.json(stats);
+  } catch (error) {
+    console.error("ADMIN ANALYTICS ERROR:", error);
+    res.status(500).json({ error: "Failed to fetch analytics data" });
+  }
+});
+
+/* =========================
+   STUDENT ANALYTICS DASHBOARD
+========================= */
+app.get("/student/analytics/:uid", async (req, res) => {
+  try {
+    const uid = req.params.uid;
+    // Get student profile
+    const profileDoc = await db.collection("users").doc(uid).get();
+    if (!profileDoc.exists) {
+      return res.status(404).json({ error: "Student profile not found" });
+    }
+    // Get courses applied
+    const enrollSnap = await db.collection("enrollment_requests")
+      .where("studentUid", "==", uid)
+      .where("status", "==", "approved")
+      .get();
+    let courses = [];
+    let totalSessions = 0;
+    let totalAttended = 0;
+    for (const doc of enrollSnap.docs) {
+      const enrollData = doc.data();
+      const courseId = enrollData.courseId;
+      // Get course name
+      let courseName = courseId;
+      const courseDoc = await db.collection("courses").doc(courseId).get();
+      if (courseDoc.exists) courseName = courseDoc.data().name || courseId;
+      // Get attendance summary
+      const attDoc = await db.collection("attendance_summary")
+        .doc(uid).collection("courses").doc(courseId).get();
+      let attendance = 0;
+      let attended = 0;
+      let sessions = 0;
+      if (attDoc.exists) {
+        const attData = attDoc.data();
+        sessions = attData.totalClasses || 0;
+        attended = attData.attended || 0;
+        attendance = sessions === 0 ? 0 : (attended / sessions) * 100;
+      }
+      totalSessions += sessions;
+      totalAttended += attended;
+      courses.push({
+        id: courseId,
+        name: courseName,
+        attendance,
+        sessions,
+        attended
+      });
+    }
+    // Calculate overall attendance
+    const overallAttendance = totalSessions === 0 ? 0 : (totalAttended / totalSessions) * 100;
+    res.json({
+      courses,
+      overallAttendance,
+      totalSessions
+    });
+  } catch (err) {
+    console.error("STUDENT ANALYTICS ERROR:", err);
+    res.status(500).json({ error: "Failed to fetch student analytics" });
+  }
+});
 
 /* =========================
    START SERVER
