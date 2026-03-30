@@ -2779,57 +2779,104 @@ app.post("/chatbot", async (req, res) => {
 /* =========================
    ADMIN ANALYTICS (DASHBOARD)
 ========================= */
+
+app.get("/admin/analytics", verifyAdmin, async (req, res) => {
+  try {
+    const stats = {
+      totalUsers: 0,
+      totalStudents: 0,
+      totalLecturers: 0,
+      totalCourses: 0,
+      classesAnalytics: []
+    };
+
+    // 1. Get user counts
+    const usersSnap = await db.collection("users").get();
+    stats.totalUsers = usersSnap.size;
+    usersSnap.forEach(doc => {
+      const data = doc.data();
+      if (data.role === "student") stats.totalStudents++;
+      else if (data.role === "lecturer") stats.totalLecturers++;
+    });
+
+    // 2. Get total courses
+    const coursesSnap = await db.collection("courses").get();
+    stats.totalCourses = coursesSnap.size;
+
+    // 3. Get class analytics
+    const analyticsSnap = await db.collection("class_analytics").get();
+    analyticsSnap.forEach(doc => {
+      stats.classesAnalytics.push({
+        classId: doc.id,
+        ...doc.data()
+      });
+    });
+
+    res.json(stats);
+  } catch (error) {
+    console.error("ADMIN ANALYTICS ERROR:", error);
+    res.status(500).json({ error: "Failed to fetch analytics data" });
+  }
+});
+
+/* =========================
+   STUDENT ANALYTICS DASHBOARD
+========================= */
 app.get("/student/analytics/:uid", async (req, res) => {
   try {
-
     const uid = req.params.uid;
-
-    const snap = await db
-      .collection("attendance_summary")
-      .doc(uid)
-      .collection("courses")
+    // Get student profile
+    const profileDoc = await db.collection("users").doc(uid).get();
+    if (!profileDoc.exists) {
+      return res.status(404).json({ error: "Student profile not found" });
+    }
+    // Get courses applied
+    const enrollSnap = await db.collection("enrollment_requests")
+      .where("studentUid", "==", uid)
+      .where("status", "==", "approved")
       .get();
-
     let courses = [];
     let totalSessions = 0;
     let totalAttended = 0;
-
-    snap.forEach(doc => {
-
-      const data = doc.data();
-
-      const sessions = data.totalClasses || 0;
-      const attended = data.attended || 0;
-
-      const attendance =
-        sessions === 0 ? 0 : (attended / sessions) * 100;
-
+    for (const doc of enrollSnap.docs) {
+      const enrollData = doc.data();
+      const courseId = enrollData.courseId;
+      // Get course name
+      let courseName = courseId;
+      const courseDoc = await db.collection("courses").doc(courseId).get();
+      if (courseDoc.exists) courseName = courseDoc.data().name || courseId;
+      // Get attendance summary
+      const attDoc = await db.collection("attendance_summary")
+        .doc(uid).collection("courses").doc(courseId).get();
+      let attendance = 0;
+      let attended = 0;
+      let sessions = 0;
+      if (attDoc.exists) {
+        const attData = attDoc.data();
+        sessions = attData.totalClasses || 0;
+        attended = attData.attended || 0;
+        attendance = sessions === 0 ? 0 : (attended / sessions) * 100;
+      }
       totalSessions += sessions;
       totalAttended += attended;
-
       courses.push({
-        id: doc.id,
-        name: doc.id,
+        id: courseId,
+        name: courseName,
         attendance,
         sessions,
         attended
       });
-
-    });
-
-    const overallAttendance =
-      totalSessions === 0 ? 0 :
-      (totalAttended / totalSessions) * 100;
-
+    }
+    // Calculate overall attendance
+    const overallAttendance = totalSessions === 0 ? 0 : (totalAttended / totalSessions) * 100;
     res.json({
       courses,
       overallAttendance,
       totalSessions
     });
-
   } catch (err) {
     console.error("STUDENT ANALYTICS ERROR:", err);
-    res.status(500).json({ error: "Failed" });
+    res.status(500).json({ error: "Failed to fetch student analytics" });
   }
 });
 
