@@ -8,7 +8,14 @@ const multer = require("multer");
 const cloudinary = require("./cloudinary");
 const path = require("path");
 const app=express()
+const cors = require("cors");
 
+app.use(cors({
+  origin: "*",   // allow ALL origins
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+app.options("*", cors());
 app.use(express.static(path.join(__dirname, "../student")));
 // ✅ Node fetch (needed for Python service calls)
 const fetch = (...args) =>
