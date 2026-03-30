@@ -2739,8 +2739,16 @@ app.get("/lecturer/analytics/:uid", async (req, res) => {
     let sumAverageAttendance = 0;
 
     for (const doc of assignmentsSnap.docs) {
+
       const data = doc.data();
-      const { courseId, courseName, branch, year, semester, academicYear } = data;
+
+      // ✅ FIX YEAR
+      const courseId = data.courseId;
+      const courseName = data.courseName;
+      const branch = data.branch;
+      const year = data.year || data.currentYear; // 🔥 FIX
+      const semester = data.semester;
+      const academicYear = data.academicYear;
 
       const classId = `${courseId}_${branch}_${year}_${semester}_${academicYear}`;
 
@@ -2764,7 +2772,6 @@ app.get("/lecturer/analytics/:uid", async (req, res) => {
 
         totalStudents = studentsSnap.size;
         averageAttendance = 0;
-        totalSessions = 0;
       }
 
       totalStudentsAcrossClasses += totalStudents;
@@ -2774,6 +2781,7 @@ app.get("/lecturer/analytics/:uid", async (req, res) => {
         classId,
         courseName,
         branch,
+        year, // ✅ NOW INCLUDED
         semester,
         totalStudents,
         averageAttendance,
@@ -2782,8 +2790,11 @@ app.get("/lecturer/analytics/:uid", async (req, res) => {
     }
 
     const totalClassesTaught = assignmentsSnap.size;
+
     const overallAverageAttendance =
-      totalClassesTaught === 0 ? 0 : sumAverageAttendance / totalClassesTaught;
+      totalClassesTaught === 0
+        ? 0
+        : sumAverageAttendance / totalClassesTaught;
 
     res.json({
       totalClassesTaught,
@@ -2791,6 +2802,7 @@ app.get("/lecturer/analytics/:uid", async (req, res) => {
       overallAverageAttendance,
       classes
     });
+
   } catch (err) {
     console.error("Error fetching lecturer analytics:", err);
     res.status(500).json({ error: "Failed to load lecturer analytics" });
