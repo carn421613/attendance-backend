@@ -2711,6 +2711,92 @@ app.get("/student/analytics/:uid", async (req, res) => {
   }
 });
 
+
+
+/*=======================
+LECTURER ANALYTICS
+===============================*/
+app.get("/lecturer/analytics/:uid", async (req, res) => {
+  try {
+    const uid = req.params.uid;
+
+    const assignmentsSnap = await db
+      .collection("lecturer_assignments")
+      .where("lecturerUid", "==", uid)
+      .get();
+
+    if (assignmentsSnap.empty) {
+      return res.json({
+        totalClassesTaught: 0,
+        totalStudentsAcrossClasses: 0,
+        overallAverageAttendance: 0,
+        classes: []
+      });
+    }
+
+    const classes = [];
+    let totalStudentsAcrossClasses = 0;
+    let sumAverageAttendance = 0;
+
+    for (const doc of assignmentsSnap.docs) {
+      const data = doc.data();
+      const { courseId, courseName, branch, year, semester, academicYear } = data;
+
+      const classId = `${courseId}_${branch}_${year}_${semester}_${academicYear}`;
+
+      let totalStudents = 0;
+      let averageAttendance = 0;
+      let totalSessions = 0;
+
+      const analyticsDoc = await db.collection("class_analytics").doc(classId).get();
+
+      if (analyticsDoc.exists) {
+        const a = analyticsDoc.data();
+        totalStudents = a.totalStudents || 0;
+        averageAttendance = a.classAverageAttendance || 0;
+        totalSessions = a.totalSessions || 0;
+      } else {
+        const studentsSnap = await db
+          .collection("student_courses")
+          .doc(classId)
+          .collection("students")
+          .get();
+
+        totalStudents = studentsSnap.size;
+        averageAttendance = 0;
+        totalSessions = 0;
+      }
+
+      totalStudentsAcrossClasses += totalStudents;
+      sumAverageAttendance += averageAttendance;
+
+      classes.push({
+        classId,
+        courseName,
+        branch,
+        semester,
+        totalStudents,
+        averageAttendance,
+        totalSessions
+      });
+    }
+
+    const totalClassesTaught = assignmentsSnap.size;
+    const overallAverageAttendance =
+      totalClassesTaught === 0 ? 0 : sumAverageAttendance / totalClassesTaught;
+
+    res.json({
+      totalClassesTaught,
+      totalStudentsAcrossClasses,
+      overallAverageAttendance,
+      classes
+    });
+  } catch (err) {
+    console.error("Error fetching lecturer analytics:", err);
+    res.status(500).json({ error: "Failed to load lecturer analytics" });
+  }
+});
+
 /* =========================
    START SERVER
 ========================= */
