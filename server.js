@@ -1023,34 +1023,37 @@ app.post("/create-course", verifyAdmin, async (req, res) => {
 ======================= */
 
 app.post("/assign-lecturer-course", verifyAdmin, async (req, res) => {
-
   try {
 
     const { lecturerUid, courseId, branch, year, semester, academicYear } = req.body;
 
     if (!lecturerUid || !courseId || !branch || !year || !semester || !academicYear) {
-      return res.status(400).json({
-        error: "Missing fields"
-      });
+      return res.status(400).json({ error: "Missing fields" });
     }
 
+    // 🔥 GET COURSE
     const courseSnap = await db.collection("courses").doc(courseId).get();
 
     if (!courseSnap.exists) {
       return res.status(404).json({ error: "Course not found" });
     }
 
-    const courseName = courseSnap.data().name;
+    const courseData = courseSnap.data();
+    const courseName = courseData.name;
 
+    // 🔥 GET LECTURER
     const lecturerSnap = await db.collection("users").doc(lecturerUid).get();
 
     if (!lecturerSnap.exists) {
       return res.status(404).json({ error: "Lecturer not found" });
     }
 
-    const lecturerName = lecturerSnap.data().name;
+    const lecturerData = lecturerSnap.data();
 
-    /* CHECK DUPLICATE ASSIGNMENT */
+    const lecturerName = lecturerData.name || "N/A";
+    const lecturerEmail = lecturerData.email || "N/A"; // ✅ FIX ADDED
+
+    /* CHECK DUPLICATE */
 
     const existing = await db
       .collection("lecturer_assignments")
@@ -1068,40 +1071,32 @@ app.post("/assign-lecturer-course", verifyAdmin, async (req, res) => {
       });
     }
 
+    // 🔥 SAVE WITH EMAIL
     await db.collection("lecturer_assignments").add({
 
       lecturerUid,
       lecturerName,
+      lecturerEmail, // ✅ IMPORTANT
+
       courseId,
       courseName,
+
       branch,
       year,
       semester,
       academicYear,
 
-      createdAt:
-        admin.firestore.FieldValue.serverTimestamp()
+      createdAt: admin.firestore.FieldValue.serverTimestamp()
 
     });
 
-    res.json({
-      message: "Course assigned successfully"
-    });
+    res.json({ message: "Course assigned successfully" });
 
-  }
-
-  catch (err) {
-
+  } catch (err) {
     console.error("ASSIGN COURSE ERROR:", err);
-
-    res.status(500).json({
-      error: err.message
-    });
-
+    res.status(500).json({ error: err.message });
   }
-
 });
-
 /*------------------------------
 PROFILE MANAGING
 --------------------------------*/
