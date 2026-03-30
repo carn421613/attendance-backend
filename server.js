@@ -6,7 +6,10 @@ const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
 const cloudinary = require("./cloudinary");
+const path = require("path");
+const app=express()
 
+app.use(express.static(path.join(__dirname, "../student")));
 // ✅ Node fetch (needed for Python service calls)
 const fetch = (...args) =>
   import("node-fetch").then(({ default: fetch }) => fetch(...args));
@@ -110,10 +113,8 @@ admin.initializeApp({
   credential: admin.credential.cert(serviceAccount)
 });
 
-
-
 const db = admin.firestore();
-const app = express();
+
 
 app.use(cors({
   origin: "*",
@@ -158,9 +159,6 @@ app.get("/", (req, res) => {
 
 
 
-/* =========================
-   ENROLLMENT REQUEST (STUDENT)
-========================= */
 
 /* =========================
    ENROLLMENT REQUEST (STUDENT)
