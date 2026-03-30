@@ -225,18 +225,38 @@ app.post("/enroll", upload.array("photos", 3), async (req, res) => {
       });
 
     /* CHECK PENDING REQUEST */
-
     const existingRequest = await db
       .collection("enrollment_requests")
       .where("studentUid", "==", uid)
       .where("courseId", "==", courseId)
-      .where("status", "==", "pending")
+      .where("year", "==", currentYear)
+      .where("semester", "==", currentSemester)
+      .where("academicYear", "==", academicYear)
       .get();
 
-    if (!existingRequest.empty)
-      return res.status(400).json({
-        error: `You already have a pending request for ${courseName}`
+    if (!existingRequest.empty) {
+
+      let hasPending = false;
+      let hasApproved = false;
+
+      existingRequest.forEach(doc => {
+        const data = doc.data();
+        if (data.status === "pending") hasPending = true;
+        if (data.status === "approved") hasApproved = true;
       });
+
+      if (hasPending) {
+        return res.status(400).json({
+          error: `You already have a pending request for ${courseName}`
+        });
+      }
+
+      if (hasApproved) {
+        return res.status(400).json({
+          error: `You are already enrolled in ${courseName}`
+        });
+      }
+    }
 
     /* UPLOAD PHOTOS */
 
