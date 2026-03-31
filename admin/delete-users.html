@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Delete User</title>
+  <link rel="stylesheet" href="../css/style.css">
+
+  <style>
+    .table-container {
+      max-width: 1000px;
+      margin: auto;
+      padding: 30px;
+      color: white;
+    }
+
+    .table-card {
+      background: rgba(31, 42, 68, 0.85);
+      border-radius: 16px;
+      padding: 30px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    /* 🔥 FILTER (UPGRADED) */
+    .filter-box {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 0 auto 20px auto;
+      max-width: 300px;
+      text-align: left;
+    }
+
+    .filter-box label {
+      font-size: 14px;
+      color: #ccc;
+    }
+
+    .filter-box select {
+      padding: 12px;
+      border-radius: 10px;
+      border: none;
+      background: rgba(255,255,255,0.1);
+      color: white;
+      backdrop-filter: blur(8px);
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    .filter-box select:hover {
+      background: rgba(255,255,255,0.15);
+    }
+
+    .filter-box select:focus {
+      outline: none;
+      box-shadow: 0 0 10px #4facfe;
+    }
+
+    .filter-box option {
+      color: black;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.2);
+      text-align: left;
+    }
+
+    th {
+      color: #ccc;
+    }
+
+    tr:hover {
+      background: rgba(255,255,255,0.05);
+    }
+
+    /* 🔴 DELETE BUTTON */
+    .delete-btn {
+      background: #e53935;
+      border: none;
+      padding: 8px 12px;
+      border-radius: 8px;
+      color: white;
+      cursor: pointer;
+    }
+
+    .delete-btn:hover {
+      opacity: 0.9;
+    }
+
+    /* 🔥 ACTION BUTTONS */
+    .actions-row {
+      margin-top: 25px;
+      display: flex;
+      justify-content: space-between;
+      gap: 15px;
+    }
+
+    .back-btn {
+      flex: 1;
+      background: transparent;
+      border: 1px solid #4facfe;
+      color: #4facfe;
+      padding: 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    .back-btn:hover {
+      background: #4facfe;
+      color: white;
+    }
+
+    .logout-btn {
+      flex: 1;
+      background: #c62828;
+      color: white;
+      border: none;
+      padding: 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    .logout-btn:hover {
+      opacity: 0.9;
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <h2>🎓 CloudAttend</h2>
+  <a href="../index.html">Home</a>
+  <a href="dashboard.html">Dashboard</a>
+</div>
+
+<!-- BACKGROUND -->
+<div class="bg-circle one"></div>
+<div class="bg-circle two"></div>
+<div class="bg-circle three"></div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <div class="table-container">
+
+    <div class="table-card">
+
+      <h2>🗑️ Delete Users</h2>
+
+      <!-- 🔥 FILTER -->
+      <div class="filter-box">
+        <label>🔍 Filter by Role</label>
+        <select id="roleFilter">
+          <option value="">All Users</option>
+          <option value="student">🎓 Students</option>
+          <option value="lecturer">👨‍🏫 Lecturers</option>
+        </select>
+      </div>
+
+      <!-- STATUS -->
+      <p id="statusMessage" style="text-align:center; margin:10px 0; display:none;">
+        Loading users...
+      </p>
+
+      <!-- TABLE -->
+      <div class="table-wrapper">
+        <table id="usersTable">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Email</th>
+              <th>UID</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <!-- ACTIONS -->
+      <div class="actions-row">
+
+        <button class="back-btn"
+          onclick="location.href='dashboard.html'">
+          ← Back to Dashboard
+        </button>
+
+        <button class="logout-btn"
+          onclick="logout()">
+          🚪 Logout
+        </button>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+<!-- SCRIPTS -->
+<script type="module" src="../js/delete-user.js"></script>
+<script type="module" src="../js/logout.js"></script>
+
+</body>
+</html>

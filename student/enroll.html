@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Course Enrollment</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <h2>🎓 CloudAttend</h2>
+  <a href="../index.html">Home</a>
+  <a href="student_dashboard.html">Dashboard</a>
+</div>
+
+<!-- BACKGROUND EFFECT -->
+<div class="bg-circle one"></div>
+<div class="bg-circle two"></div>
+<div class="bg-circle three"></div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <div class="card" style="max-width:500px; width:100%;">
+
+    <h2 style="text-align:center; margin-bottom:10px;">
+      📚 Course Enrollment
+    </h2>
+
+    <p style="text-align:center; color:#ccc; margin-bottom:20px;">
+      Enroll in courses and upload your face data
+    </p>
+
+    <form onsubmit="event.preventDefault(); submitEnrollment();">
+
+      <!-- ROLL -->
+      <input 
+        id="roll" 
+        type="text" 
+        placeholder="Enter Roll Number" 
+        required
+      >
+
+      <!-- COURSE -->
+      <select id="course" required style="margin-bottom:12px; padding:12px; border-radius:8px; border:none; width:100%;">
+        <option value="">-- Select Course --</option>
+      </select>
+
+      <!-- PHOTOS -->
+      <label style="color:#ccc; font-size:14px;">Upload 2–3 Photos</label>
+      <input 
+        id="photos" 
+        type="file" 
+        multiple 
+        accept="image/*"
+        style="margin-bottom:15px;"
+      >
+
+      <!-- SUBMIT -->
+      <button type="submit">
+        Submit Enrollment
+      </button>
+
+    </form>
+
+    <!-- LOGOUT -->
+    <button onclick="logout()" style="margin-top:15px; background:#c62828;">
+      🚪 Logout
+    </button>
+
+  </div>
+
+</div>
+
+<!-- =========================
+     SCRIPTS (UNCHANGED)
+========================= -->
+<script type="module" src="../js/student-enroll.js"></script>
+<script type="module" src="../js/logout.js"></script>
+
+</body>
+
+</html>

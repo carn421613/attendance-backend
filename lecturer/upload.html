@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Class Report</title>
+  <link rel="stylesheet" href="../css/style.css">
+
+  <!-- PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+  <style>
+    .report-container {
+      max-width: 900px;
+      margin: auto;
+      padding: 30px;
+      color: white;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.2);
+    }
+
+    th {
+      color: #ccc;
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <h2>🎓 CloudAttend</h2>
+  <a href="../index.html">Home</a>
+  <a href="lecturer_dashboard.html">Dashboard</a>
+</div>
+
+<!-- BACKGROUND -->
+<div class="bg-circle one"></div>
+<div class="bg-circle two"></div>
+<div class="bg-circle three"></div>
+
+<div class="report-container">
+
+  <!-- LOADING -->
+  <div id="loadingText" style="text-align:center; margin:20px; font-size:18px;">
+    ⏳ Loading attendance data...
+  </div>
+
+  <h2>📄 Class Report</h2>
+
+  <button onclick="downloadPDF()">📥 Download PDF</button>
+
+  <table id="reportTable" style="display:none;">
+    <thead>
+      <tr>
+        <th>Student</th>
+        <th>Attendance %</th>
+      </tr>
+    </thead>
+
+    <tbody id="reportBody"></tbody>
+  </table>
+
+</div>
+
+<!-- PDF FUNCTION -->
+<script>
+function downloadPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  doc.text("Class Attendance Report", 20, 20);
+
+  let y = 40;
+
+  document.querySelectorAll("#reportBody tr").forEach(row => {
+    const cols = row.querySelectorAll("td");
+    doc.text(`${cols[0].innerText} - ${cols[1].innerText}`, 20, y);
+    y += 10;
+  });
+
+  doc.save("Class_Report.pdf");
+}
+</script>
+
+<!-- FIRESTORE LOGIC -->
+<script type="module">
+import { db } from "../js/firebase.js";
+import { collection, getDocs } 
+from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+
+async function loadReport() {
+
+  const loading = document.getElementById("loadingText");
+  const table = document.getElementById("reportTable");
+  const body = document.getElementById("reportBody");
+
+  loading.style.display = "block";
+  table.style.display = "none";
+
+  const usersSnap = await getDocs(collection(db, "users"));
+  const sessionsSnap = await getDocs(collection(db, "attendance_sessions"));
+
+  let rows = "";
+
+  // 🔥 Calculate attendance (overall)
+  let totalSessions = sessionsSnap.size;
+  let totalPresent = 0;
+
+  for (const sessionDoc of sessionsSnap.docs) {
+
+    const recordsSnap = await getDocs(
+      collection(db, "attendance_sessions", sessionDoc.id, "records")
+    );
+
+    recordsSnap.forEach(rec => {
+      if (rec.data().status === "present") {
+        totalPresent++;
+      }
+    });
+  }
+
+  let percent = totalSessions === 0 ? 0 :
+    Math.round((totalPresent / totalSessions) * 100);
+
+  // 🔥 Display students
+  usersSnap.forEach(userDoc => {
+
+    const user = userDoc.data();
+
+    if (user.role && user.role.toLowerCase() === "student") {
+
+      rows += `
+        <tr>
+          <td>${user.name || "Student"}</td>
+          <td>${percent}%</td>
+        </tr>
+      `;
+    }
+  });
+
+  body.innerHTML = rows;
+
+  loading.style.display = "none";
+  table.style.display = "table";
+}
+
+loadReport();
+</script>
+
+</body>
+</html>

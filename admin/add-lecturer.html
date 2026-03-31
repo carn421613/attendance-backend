@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Add Lecturer</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <h2>🎓 CloudAttend</h2>
+  <a href="../index.html">Home</a>
+  <a href="dashboard.html">Dashboard</a>
+</div>
+
+<!-- BACKGROUND -->
+<div class="bg-circle one"></div>
+<div class="bg-circle two"></div>
+<div class="bg-circle three"></div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <div class="card" style="max-width:500px; width:100%;">
+
+    <h2 style="text-align:center; margin-bottom:10px;">
+      👨‍🏫 Add Lecturer
+    </h2>
+
+    <p style="text-align:center; color:#ccc; margin-bottom:20px;">
+      Register a new lecturer into the system
+    </p>
+
+    <!-- FORM -->
+    <form id="addLecturerForm">
+
+      <input
+        type="text"
+        id="name"
+        placeholder="Enter Lecturer Name"
+        required
+      />
+
+      <input
+        type="email"
+        id="email"
+        placeholder="Enter Lecturer Email"
+        required
+      />
+
+      <button type="submit">
+        Add Lecturer
+      </button>
+
+    </form>
+
+    <!-- MESSAGE -->
+    <p id="formMessage" style="margin-top:15px; text-align:center;"></p>
+
+    <!-- ACTIONS -->
+    <div style="margin-top:20px; display:flex; gap:10px; flex-direction:column;">
+
+      <button onclick="location.href='dashboard.html'">
+        ← Back to Dashboard
+      </button>
+
+      <button onclick="logout()" style="background:#c62828;">
+        🚪 Logout
+      </button>
+
+    </div>
+
+  </div>
+
+</div>
+
+<!-- SCRIPT -->
+<script type="module" src="../js/admin-add-lecturer.js"></script>
+
+</body>
+</html>

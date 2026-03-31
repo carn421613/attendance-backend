@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Assign Lecturer Course</title>
+  <link rel="stylesheet" href="../css/style.css">
+
+  <style>
+    /* 🔥 SELECT STYLING */
+    select {
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 12px;
+      border-radius: 10px;
+      border: none;
+      background: rgba(255,255,255,0.1);
+      color: white;
+      backdrop-filter: blur(8px);
+      cursor: pointer;
+    }
+
+    select:focus {
+      outline: none;
+      box-shadow: 0 0 10px #4facfe;
+    }
+
+    option {
+      color: black;
+    }
+
+    /* 🔥 BUTTON ROW */
+    .actions-row {
+      margin-top: 20px;
+      display: flex;
+      gap: 12px;
+    }
+
+    .back-btn {
+      flex: 1;
+      background: transparent;
+      border: 1px solid #4facfe;
+      color: #4facfe;
+      padding: 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    .back-btn:hover {
+      background: #4facfe;
+      color: white;
+    }
+
+    .logout-btn {
+      flex: 1;
+      background: #c62828;
+      color: white;
+      border: none;
+      padding: 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: 0.3s;
+    }
+
+    .logout-btn:hover {
+      opacity: 0.9;
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <h2>🎓 CloudAttend</h2>
+  <a href="../index.html">Home</a>
+  <a href="dashboard.html">Dashboard</a>
+</div>
+
+<!-- BACKGROUND -->
+<div class="bg-circle one"></div>
+<div class="bg-circle two"></div>
+<div class="bg-circle three"></div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <div class="card" style="max-width:500px; width:100%;">
+
+    <h2 style="text-align:center; margin-bottom:10px;">
+      🧑‍🏫 Assign Course to Lecturer
+    </h2>
+
+    <p style="text-align:center; color:#ccc; margin-bottom:20px;">
+      Assign courses with academic details
+    </p>
+
+    <!-- FORM -->
+    <form onsubmit="event.preventDefault(); assignCourse();">
+
+      <!-- Lecturer -->
+      <select id="lecturerUid" required>
+        <option value="">Select Lecturer</option>
+      </select>
+
+      <!-- Course -->
+      <select id="courseId" required>
+        <option value="">Select Course</option>
+      </select>
+
+      <!-- Branch -->
+      <select id="branch" required>
+        <option value="">Select Branch</option>
+        <option value="CSE">CSE</option>
+        <option value="IT">IT</option>
+        <option value="ECE">ECE</option>
+        <option value="EEE">EEE</option>
+        <option value="MECH">MECH</option>
+      </select>
+
+      <!-- Year -->
+      <select id="year" required>
+        <option value="">Select Year</option>
+        <option value="1">1st Year</option>
+        <option value="2">2nd Year</option>
+        <option value="3">3rd Year</option>
+        <option value="4">4th Year</option>
+      </select>
+
+      <!-- Semester -->
+      <select id="semester" required>
+        <option value="">Select Semester</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+        <option value="6">6</option>
+        <option value="7">7</option>
+        <option value="8">8</option>
+      </select>
+
+      <!-- Academic Year -->
+      <select id="academicYear" required>
+        <option value="">Academic Year</option>
+        <option value="2024-2025">2024-2025</option>
+        <option value="2025-2026">2025-2026</option>
+        <option value="2026-2027">2026-2027</option>
+      </select>
+
+      <button type="submit">
+        Assign Course
+      </button>
+
+    </form>
+
+    <!-- ACTION BUTTONS -->
+    <div class="actions-row">
+
+      <button class="back-btn"
+        onclick="location.href='dashboard.html'">
+        ← Back to Dashboard
+      </button>
+
+      <button class="logout-btn"
+        onclick="logout()">
+        🚪 Logout
+      </button>
+
+    </div>
+
+  </div>
+
+</div>
+
+<!-- SCRIPTS -->
+<script type="module" src="../js/assign-course.js"></script>
+<script type="module" src="../js/logout.js"></script>
+
+</body>
+</html>

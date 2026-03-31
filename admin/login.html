@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Admin Login</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<!-- SIDEBAR (optional but consistent UI) -->
+<div class="sidebar">
+  <h2>Attendance Management</h2>
+  <a href="../index.html">Home</a>
+  <a href="../index.html">About</a>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <div class="card" style="max-width:400px; margin:auto; text-align:center;">
+
+    <h2 style="margin-bottom:10px;">🔐 Admin Login</h2>
+    <p style="margin-bottom:20px; color:#ccc;">Access your dashboard</p>
+
+    <!-- EMAIL -->
+    <input 
+      id="email" 
+      type="email" 
+      placeholder="Enter Email"
+      style="width:100%; padding:12px; margin-bottom:12px; border-radius:8px; border:none;"
+    >
+
+    <!-- PASSWORD -->
+    <input 
+      id="password" 
+      type="password" 
+      placeholder="Enter Password"
+      style="width:100%; padding:12px; margin-bottom:15px; border-radius:8px; border:none;"
+    >
+
+    <!-- LOGIN BUTTON -->
+    <button 
+      id="loginBtn"
+      style="width:100%; padding:12px; border-radius:8px; background:linear-gradient(135deg,#4facfe,#00f2fe); border:none; color:white; font-weight:bold;"
+    >
+      Login
+    </button>
+
+    <!-- FORGOT PASSWORD -->
+    <p style="margin-top:15px;">
+      <a href="#" onclick="resetPassword()" style="color:#4facfe;">
+        Forgot Password?
+      </a>
+    </p>
+
+  </div>
+
+</div>
+
+<script type="module" src="../js/login.js"></script>
+
+</body>
+</html>

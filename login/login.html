@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Login</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <h2>Attendance Management</h2>
+  <a href="../index.html">Home</a>
+  <a href="../index.html">About</a>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <div class="card" style="max-width:400px; margin:auto; text-align:center;">
+
+    <h2 style="margin-bottom:10px;">🔐 Login</h2>
+    <p style="margin-bottom:20px; color:#ccc;">Access your dashboard</p>
+
+    <!-- EMAIL -->
+    <input 
+      id="email" 
+      type="email" 
+      placeholder="Enter Email"
+    >
+
+    <!-- PASSWORD -->
+    <input 
+      id="password" 
+      type="password" 
+      placeholder="Enter Password"
+    >
+
+    <!-- LOGIN BUTTON -->
+    <button id="loginBtn">
+      Login
+    </button>
+
+    <!-- FORGOT PASSWORD -->
+    <p style="margin-top:15px;">
+      <a href="#" onclick="resetPassword()" style="color:#4facfe;">
+        Forgot Password?
+      </a>
+    </p>
+
+  </div>
+
+</div>
+
+<!-- SCRIPT -->
+<script type="module" src="../js/login.js"></script>
+
+<script>
+  window.onload = () => {
+    document.getElementById("email").value = "";
+    document.getElementById("password").value = "";
+  };
+</script>
+
+</body>
+</html>

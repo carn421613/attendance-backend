@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Student Login</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <h2>🎓 CloudAttend</h2>
+  <a href="../index.html">Home</a>
+  <a href="../index.html">About</a>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <div class="card" style="max-width:400px; margin:auto; text-align:center;">
+
+    <h2 style="margin-bottom:10px;">🎓 Student Login</h2>
+    <p style="margin-bottom:20px; color:#ccc;">Access your student dashboard</p>
+
+    <input id="email" type="email" placeholder="Enter Email">
+    <input id="password" type="password" placeholder="Enter Password">
+
+    <button id="loginBtn">Login</button>
+
+    <p style="margin-top:15px;">
+      <a href="#" onclick="resetPassword()" style="color:#4facfe;">
+        Forgot Password?
+      </a>
+    </p>
+
+  </div>
+
+</div>
+
+<script type="module" src="../js/login.js"></script>
+
+<script type="module">
+  import { protectPage } from "../js/auth-guard.js";
+  protectPage("student");
+</script>
+
+<script>
+  window.onload = () => {
+    document.getElementById("email").value = "";
+    document.getElementById("password").value = "";
+  };
+</script>
+
+</body>
+</html>

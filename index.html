@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Attendance Management System</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <h2>Attendance System</h2>
+  <a href="#" onclick="showHome()">Home</a>
+  <a href="#" onclick="showAbout()">About</a>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="main">
+
+  <!-- HOME SECTION -->
+  <div id="homeSection">
+
+    <div class="card" style="text-align:center; max-width:600px; margin:auto;">
+
+      <h1>Attendance Management</h1>
+
+      <p>
+        Manage attendance for students and lecturers efficiently
+      </p>
+
+      <div class="row">
+        <a href="admin/login.html" class="portal admin">Admin Portal</a>
+        <a href="lecturer/login.html" class="portal lecturer">Lecturer Portal</a>
+        <a href="student/login.html" class="portal student">Student Portal</a>
+      </div>
+
+    </div>
+
+  </div>
+
+  <!-- ABOUT SECTION -->
+  <div id="aboutSection" style="display:none;">
+
+  <div class="card" style="max-width:800px; margin:auto;">
+
+    <h2>About This System</h2>
+
+    <p>
+      The Cloud-Based Attendance Management System is designed to automate and simplify the process of tracking student attendance using modern web technologies and AI.
+    </p>
+
+    <h3>✨ Key Features</h3>
+    <ul>
+      <li>✔ Face Recognition-based attendance marking</li>
+      <li>✔ Secure Firebase Authentication</li>
+      <li>✔ Role-based access (Admin, Lecturer, Student)</li>
+      <li>✔ Real-time data storage using Firestore</li>
+      <li>✔ Attendance analytics and reports</li>
+      <li>✔ Cloud-based image storage</li>
+    </ul>
+
+    <h3>👨‍💻 How It Works</h3>
+    <ul>
+      <li>📌 Students enroll in courses and upload reference photos</li>
+      <li>📌 Lecturers upload class images</li>
+      <li>📌 System detects faces and marks attendance</li>
+      <li>📌 Data is stored and analytics are generated</li>
+    </ul>
+
+    <h3>🎯 Benefits</h3>
+    <ul>
+      <li>✔ Eliminates manual attendance</li>
+      <li>✔ Reduces proxy attendance</li>
+      <li>✔ Saves time for lecturers</li>
+      <li>✔ Provides accurate reports</li>
+    </ul>
+
+    <h3>🚀 Use Cases</h3>
+    <ul>
+      <li>🏫 Colleges and Universities</li>
+      <li>🎓 Training Institutes</li>
+      <li>📚 Coaching Centers</li>
+    </ul>
+
+  </div>
+
+</div>
+
+</div>
+
+<!-- CHATBOT -->
+<script src="https://www.gstatic.com/dialogflow-console/fast/messenger/bootstrap.js?v=1"></script>
+
+<df-messenger
+  intent="WELCOME"
+  chat-title="Attendance Assistant"
+  agent-id="61918f9d-50f2-415b-aca8-7c6a361fc675"
+  language-code="en">
+</df-messenger>
+
+<script>
+document.addEventListener("dfMessengerLoaded", () => {
+
+  const messenger = document.querySelector("df-messenger");
+
+  setTimeout(() => {
+    if (window.currentUserUID) {
+      messenger.setQueryParameters({
+        uid: window.currentUserUID
+      });
+      console.log("UID sent to chatbot:", window.currentUserUID);
+    }
+  }, 1500);
+
+});
+
+/* HOME / ABOUT SWITCH */
+function showHome() {
+  document.getElementById("homeSection").style.display = "block";
+  document.getElementById("aboutSection").style.display = "none";
+}
+
+function showAbout() {
+  document.getElementById("homeSection").style.display = "none";
+  document.getElementById("aboutSection").style.display = "block";
+}
+</script>
+
+</body>
+<div class="bg-circle one"></div>
+<div class="bg-circle two"></div>
+<div class="bg-circle three"></div>
+</html>

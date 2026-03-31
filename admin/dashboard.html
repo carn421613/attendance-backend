@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>Admin Dashboard</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <h2>Attendance Management</h2>
+  <a href="../index.html">Home</a>
+  <a href="#">Admin Dashboard</a>
+</div>
+
+<!-- BACKGROUND EFFECT -->
+<div class="bg-circle one"></div>
+<div class="bg-circle two"></div>
+<div class="bg-circle three"></div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <div class="card" style="max-width:900px; width:100%;">
+
+    <h2 style="text-align:center; margin-bottom:10px;">
+      🛠️ Admin Dashboard
+    </h2>
+
+    <p style="text-align:center; color:#ccc; margin-bottom:25px;">
+      Manage students, lecturers, courses, and system settings
+    </p>
+
+    <!-- GRID -->
+    <div class="row">
+      <button onclick="location.href='analytics.html'">
+  📊 System Analytics
+</button>
+
+      <button onclick="location.href='add-student.html'">➕ Add Student</button>
+
+      <button onclick="location.href='add-lecturer.html'">➕ Add Lecturer</button>
+
+      <button onclick="location.href='view-users.html'">👥 View Users</button>
+
+      <button onclick="location.href='delete-users.html'">🗑️ Delete Users</button>
+
+      <button onclick="location.href='enrollment-requests.html'">📄 Enrollment Requests</button>
+
+      <button onclick="location.href='register-course.html'">📘 Register Course</button>
+
+      <button onclick="location.href='view-courses.html'">📚 View Courses</button>
+
+      <button onclick="location.href='view-lecturer-assignments.html'">
+        👨‍🏫 Lecturer Assignments
+      </button>
+
+      <button onclick="location.href='assign-lecturer-course.html'">
+        🧑‍🏫 Assign Course
+      </button>
+
+      <!-- LOGOUT -->
+      <button onclick="logout()" style="background:#c62828;">
+        🚪 Logout
+      </button>
+
+    </div>
+
+  </div>
+
+</div>
+
+<!-- =========================
+     AUTH LOGIC (UNCHANGED)
+========================= -->
+<script type="module">
+
+import { auth } from "../js/firebase.js";
+import { onAuthStateChanged, signOut }
+from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+
+onAuthStateChanged(auth, async (user) => {
+
+  if (!user) {
+    alert("Not logged in. Redirecting to login.");
+    window.location.href = "login.html";
+    return;
+  }
+
+  const token = await user.getIdToken(true);
+  window.ADMIN_TOKEN = token;
+
+});
+
+window.logout = function () {
+  signOut(auth).then(() => {
+    window.location.href = "login.html";
+  });
+};
+
+</script>
+
+</body>
+</html>

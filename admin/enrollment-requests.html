@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Enrollment Requests</title>
+  <link rel="stylesheet" href="../css/style.css">
+
+  <style>
+    .table-container {
+      max-width: 1000px;
+      margin: auto;
+      padding: 30px;
+      color: white;
+    }
+
+    .table-card {
+      background: rgba(31, 42, 68, 0.85);
+      border-radius: 16px;
+      padding: 30px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th, td {
+      padding: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.2);
+      text-align: left;
+    }
+
+    th {
+      color: #ccc;
+    }
+
+    tr:hover {
+      background: rgba(255,255,255,0.05);
+    }
+
+    /* 🔥 ACTION BUTTONS IN TABLE */
+    .accept-btn {
+      background: #2e7d32;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 8px;
+      color: white;
+      cursor: pointer;
+      margin-right: 5px;
+    }
+
+    .reject-btn {
+      background: #e53935;
+      border: none;
+      padding: 6px 10px;
+      border-radius: 8px;
+      color: white;
+      cursor: pointer;
+    }
+
+    .accept-btn:hover {
+      opacity: 0.9;
+    }
+
+    .reject-btn:hover {
+      opacity: 0.9;
+    }
+
+    /* 🔥 BOTTOM BUTTONS */
+    .actions-row {
+      margin-top: 25px;
+      display: flex;
+      justify-content: space-between;
+      gap: 15px;
+    }
+
+    .back-btn {
+      flex: 1;
+      background: transparent;
+      border: 1px solid #4facfe;
+      color: #4facfe;
+      padding: 12px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+    .back-btn:hover {
+      background: #4facfe;
+      color: white;
+    }
+
+    .logout-btn {
+      flex: 1;
+      background: #c62828;
+      color: white;
+      border: none;
+      padding: 12px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+
+    .logout-btn:hover {
+      opacity: 0.9;
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <h2>🎓 CloudAttend</h2>
+  <a href="../index.html">Home</a>
+  <a href="dashboard.html">Dashboard</a>
+</div>
+
+<!-- BACKGROUND -->
+<div class="bg-circle one"></div>
+<div class="bg-circle two"></div>
+<div class="bg-circle three"></div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <div class="table-container">
+
+    <div class="table-card">
+
+      <h2>📄 Enrollment Requests</h2>
+
+      <!-- TABLE -->
+      <div class="table-wrapper">
+        <table id="requestsTable">
+          <thead>
+            <tr>
+              <th>Roll Number</th>
+              <th>Course</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <!-- ACTION BUTTONS -->
+      <div class="actions-row">
+
+        <button class="back-btn"
+          onclick="location.href='dashboard.html'">
+          ← Back to Dashboard
+        </button>
+
+        <button class="logout-btn"
+          onclick="logout()">
+          🚪 Logout
+        </button>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+<!-- JS -->
+<script type="module" src="../js/admin-requests.js"></script>
+<script type="module" src="../js/logout.js"></script>
+
+<script type="module">
+  import { protectPage } from "../js/auth-guard.js";
+  protectPage("admin");
+</script>
+
+</body>
+</html>
