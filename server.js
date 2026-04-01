@@ -3049,6 +3049,7 @@ app.get("/lecturer/class-report", async (req, res) => {
 /* =========================
    ADMIN ANALYTICS (FIX)
 ========================= */
+
 app.get("/admin/analytics", verifyAdmin, async (req, res) => {
 
   try {
