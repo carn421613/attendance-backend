@@ -3050,13 +3050,15 @@ app.get("/lecturer/class-report", async (req, res) => {
    ADMIN ANALYTICS (FIX)
 ========================= */
 
+/* =========================
+   ADMIN ANALYTICS (FINAL WORKING)
+========================= */
+
 app.get("/admin/analytics", verifyAdmin, async (req, res) => {
 
   try {
 
-    /* =========================
-       USERS COUNT
-    ========================= */
+    /* ================= USERS ================= */
 
     const usersSnap = await db.collection("users").get();
 
@@ -3077,162 +3079,176 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
     });
 
 
-    /* =========================
-       CLASS ANALYTICS
-    ========================= */
+    /* ================= CLASS ANALYTICS ================= */
 
-    const analyticsSnap = await db.collection("class_analytics").get();
+    const analyticsSnap =
+      await db.collection("class_analytics").get();
 
     const classesAnalytics = [];
 
+    const defaulters = [];
+
+    const toppers = [];
+
     let totalAttendance = 0;
 
-    let defaulters = [];
-    let topStudents = [];
 
     for (const doc of analyticsSnap.docs) {
 
-      const data = doc.data();
+      const d = doc.data();
 
-      const classId = doc.id;
+      const avg =
+        d.classAverageAttendance || 0;
 
-      const course = data.course || "Unknown";
-
-      const branch = data.branch || "";
-
-      const year = data.year || "";
-
-      const semester = data.semester || "";
-
-      const academicYear = data.academicYear || "";
-
-      const avgAttendance =
-        data.classAverageAttendance || 0;
-
-      totalAttendance += avgAttendance;
+      totalAttendance += avg;
 
 
-      /* =========================
-         LECTURER NAME
-      ========================= */
+      /* lecturer name */
 
-      let lecturerName = "";
+      let lecturerName = "Unknown";
 
-      if (data.lecturerUid) {
+      if (d.lecturerUid) {
 
-        const lecturerDoc = await db
-          .collection("users")
-          .doc(data.lecturerUid)
+        const lecDoc =
+          await db.collection("users")
+          .doc(d.lecturerUid)
           .get();
 
-        lecturerName =
-          lecturerDoc.exists
-            ? lecturerDoc.data().name
-            : "Unknown";
+        if (lecDoc.exists) {
+
+          lecturerName =
+            lecDoc.data().name || "Unknown";
+
+        }
 
       }
 
 
-      /* =========================
-         STUDENT LISTS
-      ========================= */
+      /* create FULL LABEL for graph */
 
-      const lowStudents =
-        data.lowAttendanceStudents || [];
+      const label =
+        `${d.course || "Course"}
+         | ${d.branch || ""}
+         | Y${d.year || ""}
+         | S${d.semester || ""}
+         | ${d.academicYear || ""}
+         | ${lecturerName}`;
 
-      const highStudents =
-        data.highAttendanceStudents || [];
 
+      /* collect defaulters */
 
-      lowStudents.forEach(s => {
-
-        if (s.percent < 75) {
+      (d.lowAttendanceStudents || [])
+        .forEach(s => {
 
           defaulters.push({
 
-            name: s.name,
-            percent: s.percent,
-            course,
-            branch,
-            year,
-            semester,
-            academicYear
+            name: s.name || "Student",
+
+            percent: s.percent || 0,
+
+            course: d.course || "",
+
+            branch: d.branch || "",
+
+            year: d.year || "",
+
+            semester: d.semester || "",
+
+            academicYear:
+              d.academicYear || ""
 
           });
 
-        }
-
-      });
+        });
 
 
-      highStudents.forEach(s => {
+      /* collect toppers */
 
-        if (s.percent >= 90) {
+      (d.highAttendanceStudents || [])
+        .forEach(s => {
 
-          topStudents.push({
+          if ((s.percent || 0) >= 90) {
 
-            name: s.name,
-            percent: s.percent,
-            course
+            toppers.push({
 
-          });
+              name: s.name || "Student",
 
-        }
+              percent: s.percent || 0,
 
-      });
+              course: d.course || ""
 
+            });
+
+          }
+
+        });
+
+
+      /* push class */
 
       classesAnalytics.push({
 
-        classId,
+        label,
 
-        course,
-        branch,
-        year,
-        semester,
-        academicYear,
+        course:
+          d.course || "",
+
+        branch:
+          d.branch || "",
+
+        year:
+          d.year || "",
+
+        semester:
+          d.semester || "",
+
+        academicYear:
+          d.academicYear || "",
 
         lecturerName,
 
-        classAverageAttendance: avgAttendance,
+        classAverageAttendance: avg,
 
-        lowAttendanceStudents: lowStudents,
+        lowAttendanceStudents:
+          d.lowAttendanceStudents || [],
 
-        highAttendanceStudents: highStudents
+        highAttendanceStudents:
+          d.highAttendanceStudents || []
 
       });
 
     }
 
 
-    /* =========================
-       FINAL RESPONSE
-    ========================= */
-
-    const overallAttendance =
-      classesAnalytics.length === 0
-        ? 0
-        : totalAttendance / classesAnalytics.length;
-
+    /* ================= RESPONSE ================= */
 
     res.json({
 
       totalUsers,
+
       totalStudents,
+
       totalLecturers,
 
-      totalCourses: classesAnalytics.length,
+      totalCourses:
+        classesAnalytics.length,
 
-      overallAttendance,
+      overallAttendance:
+
+        classesAnalytics.length
+
+          ? totalAttendance /
+            classesAnalytics.length
+
+          : 0,
 
       classesAnalytics,
 
       defaulters,
 
-      topStudents
+      toppers
 
     });
-
 
   }
 
