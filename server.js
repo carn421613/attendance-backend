@@ -329,14 +329,9 @@ app.post("/enroll", upload.array("photos", 3), async (req, res) => {
 ========================= */
 
 app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
-
   try {
 
-    console.log("=== APPROVE ENROLLMENT START ===");
-
-    const requestRef =
-      db.collection("enrollment_requests").doc(req.params.id);
-
+    const requestRef = db.collection("enrollment_requests").doc(req.params.id);
     const requestSnap = await requestRef.get();
 
     if (!requestSnap.exists)
@@ -355,171 +350,49 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
       academicYear
     } = request;
 
-    /* FETCH STUDENT */
-
-    const studentSnap =
-      await db.collection("users").doc(studentUid).get();
-
-    if (!studentSnap.exists)
-      return res.status(404).json({ error: "Student not found" });
-
-    const student = studentSnap.data();
-
-    const completedSubjects =
-      (student.semesters || []).flatMap(s => s.subjects || []);
-
-    /* COURSE RULES */
-
-    const courseRules = {
-
-      "advanced data structures": {
-        prerequisite: "data structures",
-        minCgpa: 7.5,
-        strictCgpa: 8.5,
-        seatLimit: 80
-      },
-
-      "advanced machine learning": {
-        prerequisite: "machine learning",
-        minCgpa: 7.5,
-        strictCgpa: 8.5,
-        seatLimit: 80
-      }
-
-    };
-
-    const rule =
-      courseRules[courseName.toLowerCase()] || {
-        minCgpa: 7.0,
-        strictCgpa: 8.0,
-        seatLimit: 80
-      };
-
-    /* PREREQUISITE CHECK */
-
-    if (rule.prerequisite &&
-      !completedSubjects.includes(rule.prerequisite)) {
-
-      await requestRef.update({ status: "rejected" });
-
-      return res.json({
-        message: "Rejected — prerequisite not completed"
-      });
-    }
-
-    /* CGPA CHECK */
-
-    if (Number(student.cgpa) < rule.minCgpa) {
-
-      await requestRef.update({ status: "rejected" });
-
-      return res.json({
-        message: "Rejected — CGPA below requirement"
-      });
-    }
-
-    /* CREATE CLASS ID */
-
     const classId =
       `${courseId}_${branch}_${year}_${semester}_${academicYear}`;
 
-    const classRef =
-      db.collection("student_courses").doc(classId);
+    const classRef = db.collection("student_courses").doc(classId);
+    const analyticsRef = db.collection("class_analytics").doc(classId);
 
-    /* CHECK CURRENT SEATS */
+    /* ADD STUDENT */
 
-    const classDoc = await classRef.get();
+    await classRef.collection("students").doc(studentUid).set({
+      studentUid,
+      roll,
+      enrolledAt: admin.firestore.FieldValue.serverTimestamp()
+    });
 
-    const seatCount =
-      classDoc.exists ? (classDoc.data().count || 0) : 0;
-
-    console.log("Current seats:", seatCount);
-
-    /* SEATS FULL */
-
-    if (seatCount >= rule.seatLimit) {
-
-      if (Number(student.cgpa) < rule.strictCgpa) {
-
-        await requestRef.update({ status: "waitlisted" });
-
-        return res.json({
-          message: "Added to waitlist"
-        });
-
-      }
-
-    }
-
-    /* ENSURE CLASS DOC EXISTS */
+    /* UPDATE COUNT */
 
     await classRef.set({
+      count: admin.firestore.FieldValue.increment(1)
+    }, { merge: true });
 
-      courseId,
+    /* 🔥 UPDATE ANALYTICS (MAIN FIX) */
+
+    await analyticsRef.set({
       course: courseName,
+      courseId,
       branch,
       year,
       semester,
       academicYear,
-      count: admin.firestore.FieldValue.increment(0)
-
+      totalStudents: admin.firestore.FieldValue.increment(1)
     }, { merge: true });
 
-    /* ADD STUDENT */
-
-    await classRef
-      .collection("students")
-      .doc(studentUid)
-      .set({
-
-        studentUid,
-        roll,
-        enrolledAt:
-          admin.firestore.FieldValue.serverTimestamp()
-
-      });
-
-    /* INCREMENT COUNT */
-
-    await classRef.set({
-
-      count: admin.firestore.FieldValue.increment(1)
-
-    }, { merge: true });
+    /* UPDATE REQUEST STATUS */
 
     await requestRef.update({ status: "approved" });
 
-    /* SAVE COURSE IN USER PROFILE */
+    res.json({ message: "Enrollment approved successfully" });
 
-    await db
-      .collection("users")
-      .doc(studentUid)
-      .set(
-        {
-          enrolledCourses:
-            admin.firestore.FieldValue.arrayUnion(courseName)
-        },
-        { merge: true }
-      );
-
-    res.json({
-      message: "Enrollment approved successfully"
-    });
-
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Enrollment failed" });
   }
-
-  catch (err) {
-
-    console.error("ENROLLMENT ERROR:", err);
-
-    res.status(500).json({
-      error: "Enrollment failed"
-    });
-
-  }
-
 });
-
 
 
 
@@ -2869,6 +2742,237 @@ app.get("/lecturer/analytics/:uid", async (req, res) => {
   }
 });
 
+
+/*=================
+LECTURE-CLASS-REPORTS
+=========================*/
+
+
+
+app.get("/lecturer/class-report", async (req, res) => {
+  try {
+
+    const { courseId, branch, year, semester, academicYear } = req.query;
+
+    if (!courseId || !branch || !year || !semester || !academicYear) {
+      return res.status(400).json({ error: "Missing fields" });
+    }
+
+    const classId =
+      `${courseId}_${branch}_${year}_${semester}_${academicYear}`;
+
+    console.log("CLASS ID:", classId);
+
+    /* =========================
+       GET STUDENTS
+    ========================= */
+
+    const studentsSnap = await db
+      .collection("student_courses")
+      .doc(classId)
+      .collection("students")
+      .get();
+
+    const students = [];
+
+    for (const doc of studentsSnap.docs) {
+
+      const userDoc = await db.collection("users").doc(doc.id).get();
+
+      students.push({
+        uid: doc.id,
+        name: userDoc.exists ? userDoc.data().name : "Unknown"
+      });
+
+    }
+
+    console.log("Students:", students.length);
+
+    /* =========================
+       GET SESSIONS
+    ========================= */
+
+    const sessionsSnap = await db
+      .collection("attendance_sessions")
+      .where("classId", "==", classId)
+      .get();
+
+    const sessions = [];
+    const attendanceMap = {};
+
+    students.forEach(s => {
+      attendanceMap[s.uid] = [];
+    });
+
+    for (const doc of sessionsSnap.docs) {
+
+      const session = doc.data();
+
+      // ✅ FIXED TIMESTAMP
+      const date = session.createdAt
+        ? session.createdAt.toDate().toLocaleDateString("en-GB")
+        : "N/A";
+
+      sessions.push(date);
+
+      const recordsSnap = await db
+        .collection("attendance_sessions")
+        .doc(doc.id)
+        .collection("records")
+        .get();
+
+      const presentMap = {};
+
+      recordsSnap.forEach(r => {
+        presentMap[r.id] = r.data().status === "present";
+      });
+
+      students.forEach(s => {
+        attendanceMap[s.uid].push(
+          presentMap[s.uid] ? "P" : "A"
+        );
+      });
+
+    }
+
+    /* =========================
+       ADD AVG + STATUS
+    ========================= */
+
+    const result = [];
+
+    for (const s of students) {
+
+      const summaryDoc = await db
+        .collection("attendance_summary")
+        .doc(s.uid)
+        .collection("courses")
+        .doc(classId)
+        .get();
+
+      const data = summaryDoc.exists ? summaryDoc.data() : {};
+
+      result.push({
+        name: s.name,
+        attendance: attendanceMap[s.uid] || [],
+        avg: data.attendancePercent || 0,
+        status: data.status || "N/A"
+      });
+
+    }
+
+    /* =========================
+       CLASS ANALYTICS
+    ========================= */
+
+    const classDoc = await db
+      .collection("class_analytics")
+      .doc(classId)
+      .get();
+
+    const classData = classDoc.exists ? classDoc.data() : {};
+
+    res.json({
+      sessions: sessions || [],
+      students: result || [],
+      classAverage: classData.classAverageAttendance || 0,
+      totalSessions: classData.totalSessions || sessions.length
+    });
+
+  } catch (err) {
+
+    console.error("🔥 CLASS REPORT ERROR:", err);
+
+    res.status(500).json({
+      error: err.message || "Server error"
+    });
+
+  }
+});
+
+/* =========================
+   ADMIN ANALYTICS (FIX)
+========================= */
+app.get("/admin/analytics", verifyAdmin, async (req, res) => {
+  try {
+
+    // 🔥 1. TOTAL USERS
+    const usersSnap = await db.collection("users").get();
+
+    let totalUsers = 0;
+    let totalStudents = 0;
+    let totalLecturers = 0;
+
+    usersSnap.forEach(doc => {
+      totalUsers++;
+
+      const role = doc.data().role;
+
+      if (role === "student") totalStudents++;
+      if (role === "lecturer") totalLecturers++;
+    });
+
+    // 🔥 2. CLASS ANALYTICS
+    const analyticsSnap = await db.collection("class_analytics").get();
+
+    let totalClasses = 0;
+    let totalAttendance = 0;
+
+    const defaulters = [];
+    const topStudents = [];
+
+    analyticsSnap.forEach(doc => {
+      const data = doc.data();
+
+      totalClasses++;
+
+      const avg = data.classAverageAttendance || 0;
+      totalAttendance += avg;
+
+      // LOW ATTENDANCE
+      if (data.lowAttendanceStudents) {
+        data.lowAttendanceStudents.forEach(s => {
+          if (s.percent < 75) {
+            defaulters.push({
+              name: s.name,
+              percent: s.percent
+            });
+          }
+        });
+      }
+
+      // HIGH ATTENDANCE
+      if (data.highAttendanceStudents) {
+        data.highAttendanceStudents.forEach(s => {
+          if (s.percent >= 90) {
+            topStudents.push({
+              name: s.name,
+              percent: s.percent
+            });
+          }
+        });
+      }
+    });
+
+    const overallAttendance =
+      totalClasses === 0 ? 0 : totalAttendance / totalClasses;
+
+    // 🔥 FINAL RESPONSE
+    res.json({
+      totalUsers,
+      totalStudents,
+      totalLecturers,
+      totalClasses,
+      overallAttendance,
+      defaulters,
+      topStudents
+    });
+
+  } catch (err) {
+    console.error("ADMIN ANALYTICS ERROR:", err);
+    res.status(500).json({ error: "Failed to load analytics" });
+  }
+});
 /* =========================
    START SERVER
 ========================= */
