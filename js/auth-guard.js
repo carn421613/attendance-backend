@@ -10,7 +10,7 @@ export function protectPage(allowedRole) {
 
   onAuthStateChanged(auth, async (user) => {
     if (!user) {
-      window.location.href = "../login/login.html";
+      window.location.href = "../index.html";
       return;
     }
     window.currentUserUID = user.uid;
@@ -19,7 +19,7 @@ export function protectPage(allowedRole) {
     if (!navigator.onLine) {
       alert("Offline: Please check your internet connection and reload.");
       await auth.signOut();
-      window.location.href = "../login/login.html";
+      window.location.href = "../index.html";
       return;
     }
 
@@ -30,7 +30,7 @@ export function protectPage(allowedRole) {
       console.error("Auth guard Firestore error:", error);
       alert("Unable to verify role right now. Please reconnect and try again.");
       await auth.signOut();
-      window.location.href = "../login/login.html";
+      window.location.href = "../index.html";
       return;
     }
 

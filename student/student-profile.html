@@ -2,7 +2,106 @@
 <html>
 <head>
   <title>Student Academic Profile</title>
+
   <link rel="stylesheet" href="../css/style.css">
+
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: linear-gradient(135deg, #4b3fa5, #7b3db8, #b06cff);
+      margin: 0;
+    }
+
+    .profile-container {
+      max-width: 600px;
+      margin: auto;
+      padding: 30px;
+      color: white;
+    }
+
+    /* GLASS CARD */
+    .profile-card {
+      background: rgba(31, 42, 68, 0.85);
+      border-radius: 16px;
+      padding: 30px;
+      backdrop-filter: blur(12px);
+      box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+    }
+
+    h2, h3 {
+      text-align: center;
+    }
+
+    label {
+      font-size: 13px;
+      margin-top: 10px;
+      display: block;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      margin-top: 5px;
+      background: rgba(255,255,255,0.1);
+      color: white;
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+      color: #ccc;
+    }
+
+    select option {
+      color: black;
+    }
+
+    textarea {
+      resize: none;
+      height: 70px;
+    }
+
+    hr {
+      margin: 20px 0;
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+
+    /* BUTTONS */
+    button {
+      margin-top: 12px;
+      padding: 10px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      width: 100%;
+    }
+
+    #addSemesterBtn {
+      background: linear-gradient(135deg, #4facfe, #00f2fe);
+      color: white;
+    }
+
+    #saveBtn {
+      background: #2e7d32;
+      color: white;
+    }
+
+    button:hover {
+      opacity: 0.9;
+    }
+
+    #semesterList {
+      margin-top: 10px;
+    }
+
+    #cgpaDisplay {
+      color: #00e676;
+    }
+  </style>
 </head>
 
 <body>
@@ -22,93 +121,69 @@
 <!-- MAIN -->
 <div class="main">
 
-  <div class="card" style="max-width:700px; width:100%;">
+  <div class="profile-container">
 
-    <h2 style="text-align:center; margin-bottom:20px;">
-      🎓 Academic Profile
-    </h2>
+    <div class="profile-card">
 
-    <!-- BASIC DETAILS -->
-    <div class="row">
+      <h2>📘 Academic Profile</h2>
 
-      <div>
-        <label>Branch</label>
-        <select id="branch">
-          <option value="">Select Branch</option>
-          <option value="CSE">CSE</option>
-          <option value="IT">IT</option>
-          <option value="ECE">ECE</option>
-          <option value="EEE">EEE</option>
-          <option value="MECH">MECH</option>
-          <option value="CIVIL">CIVIL</option>
-        </select>
-      </div>
+      <!-- Branch -->
+      <label>Branch</label>
+      <select id="branch">
+        <option value="">Select Branch</option>
+        <option value="CSE">CSE</option>
+        <option value="IT">IT</option>
+        <option value="ECE">ECE</option>
+        <option value="EEE">EEE</option>
+        <option value="MECH">MECH</option>
+        <option value="CIVIL">CIVIL</option>
+      </select>
 
-      <div>
-        <label>Academic Year</label>
-        <select id="academicYear">
-          <option value="">Select Academic Year</option>
-          <option value="2024-2025">2024-2025</option>
-          <option value="2025-2026">2025-2026</option>
-          <option value="2026-2027">2026-2027</option>
-        </select>
-      </div>
+      <!-- Academic Year -->
+      <label>Academic Year</label>
+      <select id="academicYear">
+        <option value="">Select Academic Year</option>
+        <option value="2024-2025">2024-2025</option>
+        <option value="2025-2026">2025-2026</option>
+        <option value="2026-2027">2026-2027</option>
+      </select>
 
-      <div>
-        <label>Current Year</label>
-        <input id="year" type="number">
-      </div>
+      <!-- Current Year -->
+      <label>Current Year</label>
+      <input id="year" type="number">
 
-      <div>
-        <label>Current Semester</label>
-        <input id="semester" type="number">
-      </div>
+      <!-- Semester -->
+      <label>Current Semester</label>
+      <input id="semester" type="number">
 
-    </div>
+      <hr>
 
-    <hr style="margin:20px 0; border-color:rgba(255,255,255,0.2);">
-
-    <!-- ADD SEM -->
-    <h3>Add Completed Semester</h3>
-
-    <div class="row">
+      <h3>Add Completed Semester</h3>
 
       <input id="semYear" type="number" placeholder="Year">
       <input id="semNumber" type="number" placeholder="Semester">
       <input id="sgpa" type="number" step="0.01" placeholder="SGPA">
 
+      <textarea id="subjects"
+        placeholder="Enter subjects separated by commas"></textarea>
+
+      <button id="addSemesterBtn">+ Add Semester</button>
+
+      <h3>Completed Semesters</h3>
+      <div id="semesterList"></div>
+
+      <p style="margin-top:20px; font-weight:bold;">
+        CGPA: <span id="cgpaDisplay"></span>
+      </p>
+
+      <button id="saveBtn">Save Profile</button>
+
     </div>
-
-    <textarea id="subjects"
-      placeholder="Enter subjects separated by commas"
-      style="width:100%; padding:12px; border-radius:8px; border:none; margin-top:10px;">
-    </textarea>
-
-    <button id="addSemesterBtn" style="margin-top:10px;">
-      + Add Semester
-    </button>
-
-    <!-- SEM LIST -->
-    <h3 style="margin-top:20px;">Completed Semesters</h3>
-    <div id="semesterList"></div>
-
-    <!-- CGPA -->
-    <p style="margin-top:20px; font-weight:bold;">
-      CGPA: <span id="cgpaDisplay"></span>
-    </p>
-
-    <!-- SAVE -->
-    <button id="saveBtn" style="margin-top:15px;">
-      💾 Save Profile
-    </button>
 
   </div>
 
 </div>
 
-<!-- =========================
-     SCRIPTS
-========================= -->
 <script type="module">
   import { protectPage } from "../js/auth-guard.js";
   protectPage("student");

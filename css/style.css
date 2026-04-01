@@ -1,21 +1,26 @@
 /* =========================
    GLOBAL
 ========================= */
+
+  /* GLOBAL THEME */
+
 body {
   margin: 0;
-  font-family: 'Segoe UI', sans-serif;
-  background: linear-gradient(135deg, #1e3c72, #2a5298);
+  font-family: 'Poppins', sans-serif;
+  background: linear-gradient(135deg, #4b3fa5, #7b3db8, #b06cff);
+  min-height: 100vh;
+
   overflow-x: hidden;   /* only disable sideways scroll */
   overflow-y: auto; /* 🔥 no scroll */
 }
-
 /* =========================
    SIDEBAR
 ========================= */
 .sidebar {
   width: 240px;
   height: 100vh;
-  background: linear-gradient(180deg, #1e3a8a, #0f172a);
+  background: rgba(30, 27, 75, 0.6);
+  backdrop-filter: blur(12px);
   position: fixed;
   top: 0;
   left: 0;

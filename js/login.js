@@ -42,14 +42,14 @@ document.getElementById("loginBtn").addEventListener("click", async function () 
     const role = userDoc.data().role.toLowerCase();
 
     if (role === "admin") {
-      window.location.href = "dashboard.html";
-    }
-    else if (role === "student") {
-      window.location.href = "../student/student_dashboard.html";
-    }
-    else if (role === "lecturer") {
-      window.location.href = "../lecturer/lecturer_dashboard.html";
-    }
+  window.location.href = "/admin/dashboard.html";
+}
+else if (role === "student") {
+  window.location.href = "/student/student_dashboard.html";
+}
+else if (role === "lecturer") {
+  window.location.href = "/lecturer/lecturer_dashboard.html";
+}
     else {
       alert("Unknown role: " + role);
     }

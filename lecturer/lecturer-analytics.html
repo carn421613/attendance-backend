@@ -2,213 +2,309 @@
 <html>
 
 <head>
-  <title>Admin - Analytics Dashboard</title>
+  <title>Lecturer - Attendance Analytics</title>
   <link rel="stylesheet" href="../css/style.css">
-
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
   <style>
-    .analytics-container {
-      max-width: 1000px;
-      margin: 40px auto;
-      padding: 0 20px;
-    }
-
-    .analytics-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 30px;
-    }
-
-    .analytics-header h1 {
-      color: white;
+    body {
+      font-family: 'Poppins', sans-serif;
       margin: 0;
+      background: linear-gradient(135deg, #4b3fa5, #7b3db8, #b06cff);
     }
 
+    .analytics-container {
+      max-width: 1100px;
+      margin: auto;
+      padding: 30px;
+      position: relative;
+      z-index: 1;
+    }
+
+    h1 {
+      color: white;
+      margin-bottom: 20px;
+    }
+
+    /* BACK BUTTON */
     .nav-btn {
-      background: rgba(255,255,255,0.2);
+      background: rgba(255, 255, 255, 0.2);
       border: 1px solid white;
       color: white;
       padding: 8px 16px;
-      border-radius: 6px;
+      border-radius: 8px;
       cursor: pointer;
+      margin-bottom: 20px;
     }
 
     .nav-btn:hover {
       background: white;
-      color: #1f3c88;
+      color: #1e2a47;
     }
 
+    /* STATS */
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 20px;
-      margin-bottom: 40px;
+      margin-bottom: 30px;
     }
 
     .stat-card {
-      background: white;
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
       padding: 25px;
-      border-radius: 14px;
+      border-radius: 15px;
       text-align: center;
+      color: white;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
+    }
+
+    .stat-card h3 {
+      font-size: 14px;
+      color: #ddd;
     }
 
     .stat-card p {
-      font-size: 28px;
+      font-size: 32px;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+
+    /* CHART */
+    .chart-section {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      padding: 25px;
+      border-radius: 15px;
+      margin-bottom: 30px;
+      color: white;
+    }
+
+    .chart-section h2 {
+      color: white;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+      padding-bottom: 10px;
+    }
+
+    .chart-container {
+      height: 300px;
+    }
+
+    /* COURSES */
+    .courses-section {
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(10px);
+      padding: 20px;
+      border-radius: 15px;
+      color: white;
+    }
+
+    .courses-section h4 {
+      color: white;
+    }
+
+    .course-list {
+      list-style: none;
+      padding: 0;
+    }
+
+    .course-list li {
+      padding: 12px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .class-name {
+      color: white;
       font-weight: bold;
     }
 
-    .chart-section,
-    .classes-section {
-      background: white;
-      padding: 25px;
-      border-radius: 14px;
-      margin-bottom: 30px;
+    .class-meta {
+      color: #ddd;
+      font-size: 13px;
+    }
+
+    .attendance-pill {
+      padding: 5px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+      background: #4caf50;
+      color: white;
+    }
+
+    .attendance-pill.danger {
+      background: #e53935;
     }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 
 <body>
+  <div class="analytics-container">
+    <button class="nav-btn" onclick="location.href='lecturer_dashboard.html'">← Back to Dashboard</button>
+    <h1 style="color:white;">Lecturer Analytics</h1>
 
-<div class="analytics-container">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <h3>Total Classes Taught</h3>
+        <p id="totalClassesTaught">-</p>
+      </div>
+      <div class="stat-card">
+        <h3>Total Students</h3>
+        <p id="totalStudentsAcrossClasses">-</p>
+      </div>
+      <div class="stat-card">
+        <h3>Overall Avg Attendance</h3>
+        <p id="overallAverageAttendance">-</p>
+      </div>
+    </div>
 
-  <div class="analytics-header">
-    <h1>📊 Admin Analytics</h1>
-    <button class="nav-btn" onclick="location.href='dashboard.html'">
-      ← Back
-    </button>
+    <div class="chart-section">
+      <h2>Average Attendance Per Class</h2>
+      <div class="chart-container">
+        <canvas id="attendanceChart"></canvas>
+      </div>
+    </div>
+
+    <div class="courses-section">
+      <h4>My Classes</h4>
+      <ul class="course-list" id="classesList">
+        <li><span style="color:#666">Loading...</span></li>
+      </ul>
+    </div>
   </div>
 
-  <!-- STATS -->
-  <div class="stats-grid">
-    <div class="stat-card">
-      <h3>Total Users</h3>
-      <p id="totalUsers">-</p>
-    </div>
-    <div class="stat-card">
-      <h3>Students</h3>
-      <p id="totalStudents">-</p>
-    </div>
-    <div class="stat-card">
-      <h3>Lecturers</h3>
-      <p id="totalLecturers">-</p>
-    </div>
-    <div class="stat-card">
-      <h3>Courses</h3>
-      <p id="totalCourses">-</p>
-    </div>
-  </div>
+  <script type="module">
+    import { auth } from "../js/firebase.js";
+    import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+    import { protectPage } from "../js/auth-guard.js";
 
-  <!-- CHART -->
-  <div class="chart-section">
-    <h3>Course-wise Attendance</h3>
-    <canvas id="attendanceChart"></canvas>
-  </div>
+    // Ensure only lecturers can access
+    protectPage("lecturer");
 
-  <!-- CLASS DATA -->
-  <div class="classes-section">
-    <h3>Class Diagnostics</h3>
-    <div id="classesList">Loading...</div>
-  </div>
-
-</div>
-
-<script type="module">
-import { auth } from "../js/firebase.js";
-import { onAuthStateChanged } 
-from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
-
-onAuthStateChanged(auth, async (user) => {
-  if (!user) {
-    window.location.href = "login.html";
-    return;
-  }
-
-  const token = await user.getIdToken(true);
-  fetchAnalytics(token);
-});
-
-async function fetchAnalytics(token) {
-  try {
-
-    // ✅ FIXED BACKEND URL (MAIN FIX)
-    const url = "https://attendance-backend-qj36.onrender.com";
-
-    const res = await fetch(`${url}/admin/analytics`, {
-      headers: {
-        Authorization: `Bearer ${token}`
+    onAuthStateChanged(auth, async (user) => {
+      if (!user) {
+        window.location.href = "login.html";
+        return;
       }
+
+      const token = await user.getIdToken(true);
+      fetchLecturerAnalytics(token, user.uid);
     });
 
-    if (!res.ok) throw new Error("API failed");
+    async function fetchLecturerAnalytics(token, uid) {
+      try {
+        const url = "https://attendance-backend-qj36.onrender.com";
 
-    const data = await res.json();
-    renderData(data);
+        const res = await fetch(`${url}/lecturer/analytics/${uid}`, {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
 
-  } catch (err) {
-    console.error(err);
-    document.getElementById("classesList").innerHTML =
-      `<p style="color:red;">Error loading analytics</p>`;
-  }
-}
+        if (!res.ok) throw new Error("Failed to load analytics");
+        const data = await res.json();
 
-function renderData(data) {
-
-  // STATS
-  document.getElementById("totalUsers").innerText = data.totalUsers || 0;
-  document.getElementById("totalStudents").innerText = data.totalStudents || 0;
-  document.getElementById("totalLecturers").innerText = data.totalLecturers || 0;
-  document.getElementById("totalCourses").innerText = data.totalCourses || 0;
-
-  const classes = data.classesAnalytics || [];
-
-  if (classes.length === 0) {
-    document.getElementById("classesList").innerHTML =
-      "<p>No data available</p>";
-    return;
-  }
-
-  // CHART DATA
-  const labels = classes.map(c => c.course || "Course");
-  const values = classes.map(c => c.classAverageAttendance || 0);
-
-  const ctx = document.getElementById("attendanceChart");
-
-  new Chart(ctx, {
-    type: "bar",
-    data: {
-      labels: labels,
-      datasets: [{
-        data: values,
-        backgroundColor: "rgba(31,60,136,0.7)"
-      }]
-    },
-    options: {
-      scales: {
-        y: {
-          beginAtZero: true,
-          max: 100
-        }
+        renderLecturerStats(data);
+      } catch (err) {
+        console.error(err);
+        document.getElementById("classesList").innerHTML = `<li style='color:red;'>Error loading analytics: ${err.message}</li>`;
       }
     }
-  });
 
-  // CLASS LIST
-  let html = "";
+    function renderLecturerStats(data) {
+      // Overall stats
+      document.getElementById("totalClassesTaught").innerText = data.totalClassesTaught || "0";
+      document.getElementById("totalStudentsAcrossClasses").innerText = data.totalStudentsAcrossClasses || "0";
+      document.getElementById("overallAverageAttendance").innerText = data.overallAverageAttendance ? `${data.overallAverageAttendance.toFixed(1)}%` : "0%";
 
-  classes.forEach(c => {
-    html += `
-      <div style="margin-bottom:15px;">
-        <strong>${c.course}</strong> → ${c.classAverageAttendance.toFixed(1)}%
-      </div>
-    `;
-  });
+      // Course-wise chart
+      const classNames = (data.classes || []).map(c => `${c.courseName} (${c.branch} S${c.semester})`);
+      const classAttendance = (data.classes || []).map(c => c.averageAttendance ? c.averageAttendance.toFixed(1) : 0);
+      renderChart(classNames, classAttendance);
 
-  document.getElementById("classesList").innerHTML = html;
-}
+      // Classes list
+      const classesList = document.getElementById("classesList");
+      if (!data.classes || data.classes.length === 0) {
+        classesList.innerHTML = `<li><span style='color:#666'>No classes assigned.</span></li>`;
+        return;
+      }
 
-</script>
+      classesList.innerHTML = data.classes.map(c => `
+        <li>
+          <div class="class-info">
+            <span class="class-name">${c.courseName}</span>
+            <span class="class-meta">${c.branch} - Year ${c.year}, Semester ${c.semester}</span>
+            
+          </div>
+          <div class="class-stats">
+            <span class="class-meta">${c.totalStudents} Students</span>
+            <span class="attendance-pill${c.averageAttendance < 75 ? ' danger' : ''}">${c.averageAttendance ? c.averageAttendance.toFixed(1) : 0}% Avg</span>
+          </div>
+        </li>
+      `).join("");
+    }
 
+    function renderChart(labels, dataPoints) {
+      const ctx = document.getElementById('attendanceChart').getContext('2d');
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Average Attendance (%)',
+            data: dataPoints,
+
+            /* 🔥 BRIGHT COLORS */
+            backgroundColor: dataPoints.map(v =>
+              v >= 75 ? '#4caf50' : '#ffb300'
+            ),
+
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+
+          plugins: {
+            legend: {
+              labels: {
+                color: "#ffffff"  // legend text
+              }
+            }
+          },
+
+          scales: {
+            x: {
+              ticks: {
+                color: "#ffffff",   // 🔥 subject names
+                font: { size: 12 }
+              },
+              grid: {
+                color: "rgba(255,255,255,0.1)" // subtle grid
+              }
+            },
+
+            y: {
+              beginAtZero: true,
+              max: 100,
+
+              ticks: {
+                color: "#ffffff",  // 🔥 numbers
+                stepSize: 10
+              },
+
+              grid: {
+                color: "rgba(255,255,255,0.1)"
+              }
+            }
+          }
+        }
+      });
+    }
+  </script>
 </body>
+
 </html>

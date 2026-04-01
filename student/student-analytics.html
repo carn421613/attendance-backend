@@ -5,7 +5,15 @@
   <title>Student - Attendance Analytics</title>
   <link rel="stylesheet" href="../css/style.css">
 
+<body>
+  <!-- Google Font -->
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600&display=swap" rel="stylesheet">
+
   <style>
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: linear-gradient(135deg, #4b3fa5, #7b3db8, #b06cff);
+    }
 
     .analytics-container {
       max-width: 1100px;
@@ -22,7 +30,7 @@
 
     /* BACK BUTTON */
     .nav-btn {
-      background: rgba(255,255,255,0.2);
+      background: rgba(255, 255, 255, 0.2);
       border: 1px solid white;
       color: white;
       padding: 8px 16px;
@@ -45,13 +53,13 @@
     }
 
     .stat-card {
-      background: rgba(255,255,255,0.1);
+      background: rgba(255, 255, 255, 0.1);
       backdrop-filter: blur(10px);
       padding: 25px;
       border-radius: 15px;
       text-align: center;
       color: white;
-      box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
     }
 
     .stat-card h3 {
@@ -67,7 +75,7 @@
 
     /* CHART */
     .chart-section {
-      background: rgba(255,255,255,0.1);
+      background: rgba(255, 255, 255, 0.1);
       backdrop-filter: blur(10px);
       padding: 25px;
       border-radius: 15px;
@@ -81,7 +89,7 @@
 
     /* COURSES */
     .courses-section {
-      background: rgba(255,255,255,0.1);
+      background: rgba(255, 255, 255, 0.1);
       backdrop-filter: blur(10px);
       padding: 20px;
       border-radius: 15px;
@@ -97,7 +105,7 @@
       display: flex;
       justify-content: space-between;
       padding: 10px 0;
-      border-bottom: 1px solid rgba(255,255,255,0.2);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.2);
     }
 
     .attendance-pill {
@@ -112,125 +120,124 @@
     .attendance-pill.danger {
       background: #c62828;
     }
-
   </style>
 
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
+  </head>
 
-<body>
+  <body>
 
-<!-- BACKGROUND EFFECT -->
-<div class="bg-circle one"></div>
-<div class="bg-circle two"></div>
-<div class="bg-circle three"></div>
+    <!-- BACKGROUND EFFECT -->
+    <div class="bg-circle one"></div>
+    <div class="bg-circle two"></div>
+    <div class="bg-circle three"></div>
 
-<div class="analytics-container">
+    <div class="analytics-container">
 
-  <button class="nav-btn" onclick="location.href='student_dashboard.html'">
-    ← Back to Dashboard
-  </button>
+      <button class="nav-btn" onclick="location.href='student_dashboard.html'">
+        ← Back to Dashboard
+      </button>
 
-  <h1>📊 Attendance Analytics</h1>
+      <h1>📊 Attendance Analytics</h1>
 
-  <!-- STATS -->
-  <div class="stats-grid">
+      <!-- STATS -->
+      <div class="stats-grid">
 
-    <div class="stat-card">
-      <h3>Overall Attendance</h3>
-      <p id="overallAttendance">-</p>
+        <div class="stat-card">
+          <h3>Overall Attendance</h3>
+          <p id="overallAttendance">-</p>
+        </div>
+
+        <div class="stat-card">
+          <h3>Total Courses</h3>
+          <p id="totalCourses">-</p>
+        </div>
+
+        <div class="stat-card">
+          <h3>Total Sessions</h3>
+          <p id="totalSessions">-</p>
+        </div>
+
+      </div>
+
+      <!-- CHART -->
+      <div class="chart-section">
+        <h3>Course-wise Attendance</h3>
+        <div class="chart-container">
+          <canvas id="attendanceChart"></canvas>
+        </div>
+      </div>
+
+      <!-- COURSE LIST -->
+      <div class="courses-section">
+        <h3>Courses</h3>
+        <ul class="course-list" id="coursesList">
+          <li>Loading...</li>
+        </ul>
+      </div>
+
     </div>
 
-    <div class="stat-card">
-      <h3>Total Courses</h3>
-      <p id="totalCourses">-</p>
-    </div>
-
-    <div class="stat-card">
-      <h3>Total Sessions</h3>
-      <p id="totalSessions">-</p>
-    </div>
-
-  </div>
-
-  <!-- CHART -->
-  <div class="chart-section">
-    <h3>Course-wise Attendance</h3>
-    <div class="chart-container">
-      <canvas id="attendanceChart"></canvas>
-    </div>
-  </div>
-
-  <!-- COURSE LIST -->
-  <div class="courses-section">
-    <h3>Courses</h3>
-    <ul class="course-list" id="coursesList">
-      <li>Loading...</li>
-    </ul>
-  </div>
-
-</div>
-
-<!-- =========================
+    <!-- =========================
      SCRIPT (UNCHANGED)
 ========================= -->
-<script type="module">
+    <script type="module">
 
-import { auth } from "../js/firebase.js";
-import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
+      import { auth } from "../js/firebase.js";
+      import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
 
-onAuthStateChanged(auth, async (user) => {
-  if (!user) {
-    window.location.href = "login.html";
-    return;
-  }
+      onAuthStateChanged(auth, async (user) => {
+        if (!user) {
+          window.location.href = "login.html";
+          return;
+        }
 
-  const token = await user.getIdToken(true);
-  fetchStudentAnalytics(token, user.uid);
-});
+        const token = await user.getIdToken(true);
+        fetchStudentAnalytics(token, user.uid);
+      });
 
-async function fetchStudentAnalytics(token, uid) {
-  try {
-    const url = "https://attendance-backend-qj36.onrender.com";
+      async function fetchStudentAnalytics(token, uid) {
+        try {
+          const url = "https://attendance-backend-qj36.onrender.com";
 
-    const res = await fetch(`${url}/student/analytics/${uid}`, {
-      headers: { "Authorization": `Bearer ${token}` }
-    });
+          const res = await fetch(`${url}/student/analytics/${uid}`, {
+            headers: { "Authorization": `Bearer ${token}` }
+          });
 
-    if (!res.ok) throw new Error("Failed to load analytics");
+          if (!res.ok) throw new Error("Failed to load analytics");
 
-    const data = await res.json();
+          const data = await res.json();
 
-    renderStudentStats(data);
+          renderStudentStats(data);
 
-  } catch (err) {
-    console.error(err);
-    document.getElementById("coursesList").innerHTML =
-      `<li style='color:red;'>Error loading analytics</li>`;
-  }
-}
+        } catch (err) {
+          console.error(err);
+          document.getElementById("coursesList").innerHTML =
+            `<li style='color:red;'>Error loading analytics</li>`;
+        }
+      }
 
-function renderStudentStats(data) {
+      function renderStudentStats(data) {
 
-  document.getElementById("overallAttendance").innerText =
-    data.overallAttendance !== undefined
-      ? `${data.overallAttendance.toFixed(1)}%`
-      : "-";
+        document.getElementById("overallAttendance").innerText =
+          data.overallAttendance !== undefined
+            ? `${data.overallAttendance.toFixed(1)}%`
+            : "-";
 
-  document.getElementById("totalCourses").innerText =
-    data.courses ? data.courses.length : "-";
+        document.getElementById("totalCourses").innerText =
+          data.courses ? data.courses.length : "-";
 
-  document.getElementById("totalSessions").innerText =
-    data.totalSessions !== undefined ? data.totalSessions : "-";
+        document.getElementById("totalSessions").innerText =
+          data.totalSessions !== undefined ? data.totalSessions : "-";
 
-  const courseNames = (data.courses || []).map(c => c.name);
-  const courseAttendance = (data.courses || []).map(c => c.attendance || 0);
+        const courseNames = (data.courses || []).map(c => c.name);
+        const courseAttendance = (data.courses || []).map(c => c.attendance || 0);
 
-  renderChart(courseNames, courseAttendance);
+        renderChart(courseNames, courseAttendance);
 
-  const list = document.getElementById("coursesList");
+        const list = document.getElementById("coursesList");
 
-  list.innerHTML = data.courses.map(course => `
+        list.innerHTML = data.courses.map(course => `
     <li>
       <span>${course.name}</span>
       <span class="attendance-pill ${course.attendance < 75 ? 'danger' : ''}">
@@ -238,58 +245,59 @@ function renderStudentStats(data) {
       </span>
     </li>
   `).join("");
-}
-
-let chartInstance = null;
-
-function renderChart(labels, dataPoints) {
-
-  const ctx = document.getElementById('attendanceChart').getContext('2d');
-
-  if (chartInstance) chartInstance.destroy();
-
-  chartInstance = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: labels,
-      datasets: [{
-        label: 'Attendance (%)',
-        data: dataPoints,
-        backgroundColor: dataPoints.map(v => v >= 75 ? '#4caf50' : '#e53935')
-      }]
-    },
-    options: {
-  responsive: true,
-  maintainAspectRatio: false,
-
-  plugins: {
-    legend: {
-      labels: {
-        color: "#ffffff"   // legend text
       }
-    }
-  },
 
-  scales: {
-    x: {
-      ticks: {
-        color: "#ffffff"   // 🔥 SUBJECT NAMES
+      let chartInstance = null;
+
+      function renderChart(labels, dataPoints) {
+
+        const ctx = document.getElementById('attendanceChart').getContext('2d');
+
+        if (chartInstance) chartInstance.destroy();
+
+        chartInstance = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [{
+              label: 'Attendance (%)',
+              data: dataPoints,
+              backgroundColor: dataPoints.map(v => v >= 75 ? '#4caf50' : '#e53935')
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+
+            plugins: {
+              legend: {
+                labels: {
+                  color: "#ffffff"   // legend text
+                }
+              }
+            },
+
+            scales: {
+              x: {
+                ticks: {
+                  color: "#ffffff"   // 🔥 SUBJECT NAMES
+                }
+              },
+              y: {
+                beginAtZero: true,
+                max: 100,
+                ticks: {
+                  color: "#ffffff",  // 🔥 0–100 NUMBERS
+                  stepSize: 10
+                }
+              }
+            }
+          }
+        });
       }
-    },
-    y: {
-      beginAtZero: true,
-      max: 100,
-      ticks: {
-        color: "#ffffff",  // 🔥 0–100 NUMBERS
-        stepSize: 10
-      }
-    }
-  }
-}
-  });
-}
 
-</script>
+    </script>
 
-</body>
+  </body>
+
 </html>
