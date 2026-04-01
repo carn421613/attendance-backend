@@ -347,7 +347,8 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
       branch,
       year,
       semester,
-      academicYear
+      academicYear,
+      photos   // important
     } = request;
 
     const classId =
@@ -370,7 +371,7 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
       count: admin.firestore.FieldValue.increment(1)
     }, { merge: true });
 
-    /* 🔥 UPDATE ANALYTICS (MAIN FIX) */
+    /* UPDATE ANALYTICS */
 
     await analyticsRef.set({
       course: courseName,
@@ -386,12 +387,62 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
 
     await requestRef.update({ status: "approved" });
 
+
+    /* =========================
+       GENERATE FACE ENCODINGS
+    ========================= */
+
+    try {
+
+      console.log("Sending images to DeepFace:", photos);
+
+      await fetch(
+
+        `${process.env.FACE_SERVICE_URL}/register-face`,
+
+        {
+
+          method: "POST",
+
+          headers: {
+            "Content-Type": "application/json"
+          },
+
+          body: JSON.stringify({
+
+            uid: studentUid,
+
+            imageUrls: photos
+
+          })
+
+        }
+
+      );
+
+      console.log("Encoding created for", studentUid);
+
+    }
+
+    catch(err){
+
+      console.log("Encoding error:", err);
+
+    }
+
+
     res.json({ message: "Enrollment approved successfully" });
 
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Enrollment failed" });
   }
+
+  catch (err) {
+
+    console.error(err);
+
+    res.status(500).json({ error: "Enrollment failed" });
+
+  }
+
 });
 
 
