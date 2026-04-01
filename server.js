@@ -3054,13 +3054,31 @@ app.get("/lecturer/class-report", async (req, res) => {
    ADMIN ANALYTICS (FINAL WORKING)
 ========================= */
 
+/* =========================
+   ADMIN ANALYTICS (FINAL)
+========================= */
+
 app.get("/admin/analytics", verifyAdmin, async (req, res) => {
 
   try {
 
-    const { branch, academicYear } = req.query;
+    /* =========================
+       FILTERS
+    ========================= */
 
-    const usersSnap = await db.collection("users").get();
+    const branchFilter =
+      req.query.branch || "";
+
+    const academicYearFilter =
+      req.query.academicYear || "";
+
+
+    /* =========================
+       USERS COUNT
+    ========================= */
+
+    const usersSnap =
+      await db.collection("users").get();
 
     let totalUsers = 0;
     let totalStudents = 0;
@@ -3072,141 +3090,232 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
 
       const role = doc.data().role;
 
-      if(role === "student") totalStudents++;
+      if (role === "student")
+        totalStudents++;
 
-      if(role === "lecturer") totalLecturers++;
+      if (role === "lecturer")
+        totalLecturers++;
 
     });
 
 
+    /* =========================
+       CLASS ANALYTICS
+    ========================= */
+
     const analyticsSnap =
       await db.collection("class_analytics").get();
 
+    let totalAttendance = 0;
 
     const classes = [];
 
-    const defaulters = [];
-
-    const toppers = [];
-
-    let totalAttendance = 0;
+    let defaulters = [];
+    let toppers = [];
 
 
-    for(const doc of analyticsSnap.docs){
+    for (const doc of analyticsSnap.docs) {
 
-      const d = doc.data();
+      const data = doc.data();
+
+      const classId = doc.id;
+
+      const course =
+        data.course || "Unknown";
+
+      const courseId =
+        data.courseId || "";
+
+      const branch =
+        data.branch || "";
+
+      const year =
+        data.year || "";
+
+      const semester =
+        data.semester || "";
+
+      const academicYear =
+        data.academicYear || "";
+
+      const avg =
+        data.classAverageAttendance || 0;
 
 
-      if(branch && d.branch !== branch) continue;
+      /* =========================
+         APPLY FILTER
+      ========================= */
 
-      if(academicYear &&
-         d.academicYear !== academicYear) continue;
+      if (
+        branchFilter &&
+        branch !== branchFilter
+      ) continue;
+
+      if (
+        academicYearFilter &&
+        academicYear !== academicYearFilter
+      ) continue;
 
 
-      let lecturerName = "Unknown";
+      totalAttendance += avg;
 
 
-      if(d.lecturerUid){
+      /* =========================
+         GET LECTURER UID
+         from lecturer_assignments
+      ========================= */
 
-        const lecDoc =
-          await db.collection("users")
-          .doc(d.lecturerUid)
+      let lecturerUid = "";
+
+      const lecturerSnap =
+        await db.collection("lecturer_assignments")
+          .where("courseId", "==", courseId)
+          .where("branch", "==", branch)
+          .where("year", "==", year)
+          .where("semester", "==", semester)
+          .where("academicYear", "==", academicYear)
           .get();
 
-        if(lecDoc.exists){
+      if (!lecturerSnap.empty) {
 
-          lecturerName =
-            lecDoc.data().name || "Unknown";
-
-        }
+        lecturerUid =
+          lecturerSnap.docs[0]
+            .data()
+            .lecturerUid;
 
       }
 
 
-      totalAttendance +=
-        d.classAverageAttendance || 0;
+      /* =========================
+         GET LECTURER NAME
+         from users
+      ========================= */
+
+      let lecturerName =
+        "Not Assigned";
+
+      if (lecturerUid) {
+
+        const lecturerDoc =
+          await db.collection("users")
+            .doc(lecturerUid)
+            .get();
+
+        if (lecturerDoc.exists)
+          lecturerName =
+            lecturerDoc.data().name;
+
+      }
 
 
-      (d.lowAttendanceStudents || [])
-        .forEach(s => {
+      /* =========================
+         LOW ATTENDANCE
+      ========================= */
+
+      const lowStudents =
+        data.lowAttendanceStudents || [];
+
+      lowStudents.forEach(s => {
+
+        if (s.percent < 75) {
 
           defaulters.push({
 
-            name:s.name,
+            name: s.name,
+            percent: s.percent,
 
-            percent:s.percent,
-
-            course:d.course,
-
-            branch:d.branch,
-
-            year:d.year,
-
-            semester:d.semester,
-
-            academicYear:d.academicYear
+            course,
+            branch,
+            year,
+            semester,
+            academicYear
 
           });
 
-        });
+        }
+
+      });
 
 
-      (d.highAttendanceStudents || [])
-        .forEach(s => {
+      /* =========================
+         HIGH ATTENDANCE
+      ========================= */
 
-          if(s.percent >= 90){
+      const highStudents =
+        data.highAttendanceStudents || [];
 
-            toppers.push({
+      highStudents.forEach(s => {
 
-              name:s.name,
+        if (s.percent >= 90) {
 
-              percent:s.percent,
+          toppers.push({
 
-              course:d.course
+            name: s.name,
+            percent: s.percent,
 
-            });
+            course,
+            branch,
+            year,
+            semester,
+            academicYear
 
-          }
+          });
 
-        });
+        }
 
+      });
+
+
+      /* =========================
+         CLASS OBJECT
+      ========================= */
 
       classes.push({
 
-        course:d.course,
+        classId,
 
-        branch:d.branch,
+        course,
+        courseId,
 
-        year:d.year,
-
-        semester:d.semester,
-
-        academicYear:d.academicYear,
+        branch,
+        year,
+        semester,
+        academicYear,
 
         lecturerName,
 
-        avg:d.classAverageAttendance || 0
+        avg
 
       });
 
     }
 
 
+    /* =========================
+       OVERALL AVG
+    ========================= */
+
+    const overallAttendance =
+      classes.length === 0
+        ? 0
+        : totalAttendance /
+          classes.length;
+
+
+    /* =========================
+       RESPONSE
+    ========================= */
+
     res.json({
 
       totalUsers,
-
       totalStudents,
-
       totalLecturers,
 
-      totalCourses:classes.length,
+      totalCourses:
+        classes.length,
 
-      overallAttendance:
-
-        classes.length
-        ? totalAttendance/classes.length
-        : 0,
+      overallAttendance,
 
       classes,
 
@@ -3218,13 +3327,17 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
 
   }
 
-  catch(err){
+  catch (err) {
 
-    console.log(err);
+    console.error(
+      "ADMIN ANALYTICS ERROR:",
+      err
+    );
 
     res.status(500).json({
 
-      error:"analytics failed"
+      error:
+        "Failed to load analytics"
 
     });
 
