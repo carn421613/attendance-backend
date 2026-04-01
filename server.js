@@ -3058,7 +3058,7 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
 
   try {
 
-    /* ================= USERS ================= */
+    const { branch, academicYear } = req.query;
 
     const usersSnap = await db.collection("users").get();
 
@@ -3072,19 +3072,18 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
 
       const role = doc.data().role;
 
-      if (role === "student") totalStudents++;
+      if(role === "student") totalStudents++;
 
-      if (role === "lecturer") totalLecturers++;
+      if(role === "lecturer") totalLecturers++;
 
     });
 
 
-    /* ================= CLASS ANALYTICS ================= */
-
     const analyticsSnap =
       await db.collection("class_analytics").get();
 
-    const classesAnalytics = [];
+
+    const classes = [];
 
     const defaulters = [];
 
@@ -3093,28 +3092,28 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
     let totalAttendance = 0;
 
 
-    for (const doc of analyticsSnap.docs) {
+    for(const doc of analyticsSnap.docs){
 
       const d = doc.data();
 
-      const avg =
-        d.classAverageAttendance || 0;
 
-      totalAttendance += avg;
+      if(branch && d.branch !== branch) continue;
 
+      if(academicYear &&
+         d.academicYear !== academicYear) continue;
 
-      /* lecturer name */
 
       let lecturerName = "Unknown";
 
-      if (d.lecturerUid) {
+
+      if(d.lecturerUid){
 
         const lecDoc =
           await db.collection("users")
           .doc(d.lecturerUid)
           .get();
 
-        if (lecDoc.exists) {
+        if(lecDoc.exists){
 
           lecturerName =
             lecDoc.data().name || "Unknown";
@@ -3124,58 +3123,46 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
       }
 
 
-      /* create FULL LABEL for graph */
+      totalAttendance +=
+        d.classAverageAttendance || 0;
 
-      const label =
-        `${d.course || "Course"}
-         | ${d.branch || ""}
-         | Y${d.year || ""}
-         | S${d.semester || ""}
-         | ${d.academicYear || ""}
-         | ${lecturerName}`;
-
-
-      /* collect defaulters */
 
       (d.lowAttendanceStudents || [])
         .forEach(s => {
 
           defaulters.push({
 
-            name: s.name || "Student",
+            name:s.name,
 
-            percent: s.percent || 0,
+            percent:s.percent,
 
-            course: d.course || "",
+            course:d.course,
 
-            branch: d.branch || "",
+            branch:d.branch,
 
-            year: d.year || "",
+            year:d.year,
 
-            semester: d.semester || "",
+            semester:d.semester,
 
-            academicYear:
-              d.academicYear || ""
+            academicYear:d.academicYear
 
           });
 
         });
 
 
-      /* collect toppers */
-
       (d.highAttendanceStudents || [])
         .forEach(s => {
 
-          if ((s.percent || 0) >= 90) {
+          if(s.percent >= 90){
 
             toppers.push({
 
-              name: s.name || "Student",
+              name:s.name,
 
-              percent: s.percent || 0,
+              percent:s.percent,
 
-              course: d.course || ""
+              course:d.course
 
             });
 
@@ -3184,43 +3171,26 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
         });
 
 
-      /* push class */
+      classes.push({
 
-      classesAnalytics.push({
+        course:d.course,
 
-        label,
+        branch:d.branch,
 
-        course:
-          d.course || "",
+        year:d.year,
 
-        branch:
-          d.branch || "",
+        semester:d.semester,
 
-        year:
-          d.year || "",
-
-        semester:
-          d.semester || "",
-
-        academicYear:
-          d.academicYear || "",
+        academicYear:d.academicYear,
 
         lecturerName,
 
-        classAverageAttendance: avg,
-
-        lowAttendanceStudents:
-          d.lowAttendanceStudents || [],
-
-        highAttendanceStudents:
-          d.highAttendanceStudents || []
+        avg:d.classAverageAttendance || 0
 
       });
 
     }
 
-
-    /* ================= RESPONSE ================= */
 
     res.json({
 
@@ -3230,19 +3200,15 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
 
       totalLecturers,
 
-      totalCourses:
-        classesAnalytics.length,
+      totalCourses:classes.length,
 
       overallAttendance:
 
-        classesAnalytics.length
+        classes.length
+        ? totalAttendance/classes.length
+        : 0,
 
-          ? totalAttendance /
-            classesAnalytics.length
-
-          : 0,
-
-      classesAnalytics,
+      classes,
 
       defaulters,
 
@@ -3252,13 +3218,13 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
 
   }
 
-  catch (err) {
+  catch(err){
 
-    console.error("ADMIN ANALYTICS ERROR:", err);
+    console.log(err);
 
     res.status(500).json({
 
-      error: "Failed to load analytics"
+      error:"analytics failed"
 
     });
 
