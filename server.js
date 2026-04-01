@@ -3129,6 +3129,114 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
     res.status(500).json({ error: "Failed to load analytics" });
   }
 });
+
+app.get("/admin/analytics", verifyAdmin, async (req, res) => {
+  try {
+
+    // 🔥 1. TOTAL USERS
+    const usersSnap = await db.collection("users").get();
+    
+    let totalUsers = 0;
+    let totalStudents = 0;
+    let totalLecturers = 0;
+
+    usersSnap.forEach(doc => {
+      totalUsers++;
+
+      const role = (doc.data().role || "").toLowerCase();
+
+      if (role === "student") totalStudents++;
+      if (role === "lecturer") totalLecturers++;
+    });
+
+    // 🔥 2. GET ALL COURSES
+    const coursesSnap = await db.collection("courses").get();
+    const totalCourses = coursesSnap.size;
+
+    // 🔥 3. GET CLASS ANALYTICS
+    const analyticsSnap = await db.collection("class_analytics").get();
+
+    let totalClasses = 0;
+    let totalAttendance = 0;
+
+    const defaulters = [];
+    const topStudents = [];
+
+    // 🔥 CREATE MAP (course → analytics)
+    const analyticsMap = {};
+
+    analyticsSnap.forEach(doc => {
+      const data = doc.data();
+      const courseName = data.courseName || data.course;
+
+      analyticsMap[courseName] = {
+        classAverageAttendance: data.classAverageAttendance || 0,
+        lowAttendanceStudents: data.lowAttendanceStudents || [],
+        highAttendanceStudents: data.highAttendanceStudents || []
+      };
+
+      // totals
+      totalClasses++;
+      totalAttendance += data.classAverageAttendance || 0;
+
+      // defaulters
+      (data.lowAttendanceStudents || []).forEach(s => {
+        if (s.percent < 75) {
+          defaulters.push(s);
+        }
+      });
+
+      // top students
+      (data.highAttendanceStudents || []).forEach(s => {
+        if (s.percent >= 90) {
+          topStudents.push(s);
+        }
+      });
+    });
+
+    // 🔥 4. BUILD ALL COURSES (IMPORTANT FIX)
+    const classesAnalytics = [];
+
+    coursesSnap.forEach(doc => {
+      const courseName = doc.data().name || doc.data().courseName;
+
+      if (analyticsMap[courseName]) {
+        classesAnalytics.push({
+          course: courseName,
+          ...analyticsMap[courseName]
+        });
+      } else {
+        // no attendance data → show 0%
+        classesAnalytics.push({
+          course: courseName,
+          classAverageAttendance: 0,
+          lowAttendanceStudents: [],
+          highAttendanceStudents: []
+        });
+      }
+    });
+
+    // 🔥 5. OVERALL ATTENDANCE
+    const overallAttendance =
+      totalClasses === 0 ? 0 : totalAttendance / totalClasses;
+
+    // 🔥 FINAL RESPONSE
+    res.json({
+      totalUsers,
+      totalStudents,
+      totalLecturers,
+      totalCourses,
+      classesAnalytics,
+      defaulters,
+      topStudents,
+      overallAttendance
+    });
+
+  } catch (err) {
+    console.error("ADMIN ANALYTICS ERROR:", err);
+    res.status(500).json({ error: "Failed to load analytics" });
+  }
+});
 /* =========================
    START SERVER
 ========================= */
