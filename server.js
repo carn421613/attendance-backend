@@ -710,39 +710,76 @@ app.delete("/delete-user/:uid", verifyAdmin, async (req, res) => {
 /*====================
   UPLOAD CLASS PHOTO
   ======================*/
-app.post("/upload-class-photo", upload.array("photo",5), async (req, res) => {
+app.post("/upload-class-photo", upload.array("photo", 5), async (req, res) => {
 
   try {
 
-    const { lecturerUid, branch, academicYear, year, semester, course } = req.body;
+    const {
+      lecturerUid,
+      branch,
+      academicYear,
+      year,
+      semester,
+      course
+    } = req.body;
 
-    if (!lecturerUid || !branch || !academicYear || !year || !semester || !course) {
-      return res.status(400).json({ error: "Missing fields" });
-    }
-
-    if (!req.file) {
-      return res.status(400).json({ error: "Photo required" });
-    }
 
     /* =========================
-       FIND COURSE ID
+       VALIDATION
     ========================= */
 
-    const courseSnap = await db
-      .collection("courses")
-      .where("name", "==", course)
-      .get();
+    if (
+      !lecturerUid ||
+      !branch ||
+      !academicYear ||
+      !year ||
+      !semester ||
+      !course
+    ) {
 
-    if (courseSnap.empty) {
-      return res.status(400).json({ error: "Course not found" });
+      return res.status(400).json({
+        error: "Missing fields"
+      });
+
     }
 
-    const courseDoc = courseSnap.docs[0];
-    const courseId = courseDoc.id;
-    const courseName = courseDoc.data().name;
+
+    /* FIXED: req.files */
+    if (!req.files || req.files.length === 0) {
+
+      return res.status(400).json({
+        error: "Photos required"
+      });
+
+    }
+
 
     /* =========================
-       VERIFY LECTURER ASSIGNMENT
+       GET COURSE
+    ========================= */
+
+    const courseDoc = await db
+      .collection("courses")
+      .doc(course)
+      .get();
+
+
+    if (!courseDoc.exists) {
+
+      return res.status(400).json({
+        error: "Course not found"
+      });
+
+    }
+
+
+    const courseId = courseDoc.id;
+
+    const courseName = courseDoc.data().name;
+
+
+    /* =========================
+       VERIFY LECTURER
     ========================= */
 
     const assignSnap = await db
@@ -755,101 +792,156 @@ app.post("/upload-class-photo", upload.array("photo",5), async (req, res) => {
       .where("academicYear", "==", academicYear)
       .get();
 
+
     if (assignSnap.empty) {
+
       return res.status(400).json({
+
         error: "Lecturer not assigned to this class"
+
       });
+
     }
 
+
     /* =========================
-       CREATE CLASS ID
+       CLASS ID
     ========================= */
 
     const classId =
       `${courseId}_${branch}_${year}_${semester}_${academicYear}`;
 
-    /* =========================
-       UPLOAD PHOTO
-    ========================= */
-
-    const files = req.files;
-
-if (!files || files.length === 0) {
-  return res.status(400).json({ error: "Photos required" });
-}
-
-const imageUrls = [];
-
-for (const file of files) {
-
-  const base64 =
-    `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
-
-  const result = await cloudinary.uploader.upload(base64, {
-    folder: "class_photos"
-  });
-
-  imageUrls.push(result.secure_url);
-}
 
     /* =========================
-       CREATE ATTENDANCE SESSION
+       UPLOAD TO CLOUDINARY
     ========================= */
 
-    const sessionRef = await db.collection("attendance_sessions").add({
+    const imageUrls = [];
 
-      lecturerUid,
 
-      courseId,
-      course: courseName,
+    for (const file of req.files) {
 
-      branch,
-      year,
-      semester,
-      academicYear,
+      const base64 =
+        `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
 
-      classId,
 
-      classPhotoUrl: imageUrls,
+      const result =
+        await cloudinary.uploader.upload(base64, {
 
-      createdAt: admin.firestore.FieldValue.serverTimestamp()
+          folder: "class_photos"
 
-    });
+        });
+
+
+      imageUrls.push(result.secure_url);
+
+    }
+
+
+    /* =========================
+       CREATE SESSION
+    ========================= */
+
+    const sessionRef =
+      await db.collection("attendance_sessions").add({
+
+        lecturerUid,
+
+        courseId,
+
+        course: courseName,
+
+        branch,
+
+        year,
+
+        semester,
+
+        academicYear,
+
+        classId,
+
+        classPhotoUrls: imageUrls,
+
+        createdAt:
+          admin.firestore.FieldValue.serverTimestamp()
+
+      });
+
 
     const sessionId = sessionRef.id;
 
+
     /* =========================
-       CALL FACE SERVICE
+       CALL PYTHON SERVICE
     ========================= */
 
-    callFaceService(
-      `${process.env.FACE_SERVICE_URL}/mark-attendance`,
-      {
-        groupPhoto: imageUrls,
-        classId: classId,
-        sessionId: sessionId,
+    fetch(
 
-        courseId,
-        course: courseName,
-        lecturerUid,
-        year,
-        semester
+      `${process.env.FACE_SERVICE_URL}/mark-attendance`,
+
+      {
+
+        method: "POST",
+
+        headers: {
+
+          "Content-Type": "application/json"
+
+        },
+
+        body: JSON.stringify({
+
+          groupPhotos: imageUrls,
+
+          classId,
+
+          sessionId,
+
+          courseId,
+
+          course: courseName,
+
+          lecturerUid,
+
+          year,
+
+          semester,
+
+          branch,
+
+          academicYear
+
+        })
+
       }
-    ).catch(() => { });
+
+    ).catch(err => console.log("Face service error:", err));
+
+
+    /* =========================
+       RESPONSE
+    ========================= */
 
     res.json({
-      message: "Class photo uploaded successfully",
+
+      message: "Uploaded successfully",
+
       sessionId
+
     });
 
   }
 
   catch (err) {
 
-    console.error("UPLOAD CLASS PHOTO ERROR:", err);
+    console.error("UPLOAD ERROR:", err);
+
 
     res.status(500).json({
-      error: "Upload failed"
+
+      error: err.message
+
     });
 
   }
