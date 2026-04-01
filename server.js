@@ -710,7 +710,7 @@ app.delete("/delete-user/:uid", verifyAdmin, async (req, res) => {
 /*====================
   UPLOAD CLASS PHOTO
   ======================*/
-app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
+app.post("/upload-class-photo", upload.array("photo",5), async (req, res) => {
 
   try {
 
@@ -772,12 +772,25 @@ app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
        UPLOAD PHOTO
     ========================= */
 
-    const base64Image =
-      `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
+    const files = req.files;
 
-    const result = await cloudinary.uploader.upload(base64Image, {
-      folder: "class_photos"
-    });
+if (!files || files.length === 0) {
+  return res.status(400).json({ error: "Photos required" });
+}
+
+const imageUrls = [];
+
+for (const file of files) {
+
+  const base64 =
+    `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
+
+  const result = await cloudinary.uploader.upload(base64, {
+    folder: "class_photos"
+  });
+
+  imageUrls.push(result.secure_url);
+}
 
     /* =========================
        CREATE ATTENDANCE SESSION
@@ -797,7 +810,7 @@ app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
 
       classId,
 
-      classPhotoUrl: result.secure_url,
+      classPhotoUrl: imageUrls,
 
       createdAt: admin.firestore.FieldValue.serverTimestamp()
 
@@ -812,7 +825,7 @@ app.post("/upload-class-photo", upload.single("photo"), async (req, res) => {
     callFaceService(
       `${process.env.FACE_SERVICE_URL}/mark-attendance`,
       {
-        groupPhoto: result.secure_url,
+        groupPhoto: imageUrls,
         classId: classId,
         sessionId: sessionId,
 
