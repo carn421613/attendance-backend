@@ -3066,8 +3066,6 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
 
   try {
 
-    /* ================= FILTERS ================= */
-
     const branchFilter =
       req.query.branch || "";
 
@@ -3075,7 +3073,7 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
       req.query.academicYear || "";
 
 
-    /* ================= USERS COUNT ================= */
+    /* USER COUNT */
 
     const usersSnap =
       await db.collection("users").get();
@@ -3099,7 +3097,7 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
     });
 
 
-    /* ================= CLASS ANALYTICS ================= */
+    /* ANALYTICS */
 
     const analyticsSnap =
       await db.collection("class_analytics").get();
@@ -3117,37 +3115,78 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
 
       const data = doc.data();
 
-      const course =
+      const classId = doc.id;
+
+
+      /* GET DETAILS */
+
+      let course =
         data.course || "Unknown";
 
-      const courseId =
+      let courseId =
         data.courseId || "";
 
-      const branch =
-        (data.branch || "").toString().toUpperCase();
 
-      const year =
+      let branch =
+        data.branch || "";
+
+      let year =
         data.year != null
           ? String(data.year)
           : "";
 
-      const semester =
+      let semester =
         data.semester != null
           ? String(data.semester)
           : "";
 
-      const academicYear =
+      let academicYear =
         data.academicYear || "";
+
+
+      /* FIX MISSING DATA using classId */
+
+      if (
+        (!branch || !year || !semester)
+        &&
+        classId.includes("_")
+      ) {
+
+        const parts =
+          classId.split("_");
+
+        /*
+        format:
+        ML11_CSE_3_1_2025-2026
+        */
+
+        courseId =
+          courseId || parts[0];
+
+        branch =
+          branch || parts[1];
+
+        year =
+          year || parts[2];
+
+        semester =
+          semester || parts[3];
+
+        academicYear =
+          academicYear || parts[4];
+
+      }
+
 
       const avg =
         data.classAverageAttendance || 0;
 
 
-      /* ================= APPLY FILTER ================= */
+      /* FILTER */
 
       if (
         branchFilter &&
-        branch !== branchFilter.toUpperCase()
+        branch !== branchFilter
       ) continue;
 
       if (
@@ -3159,11 +3198,12 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
       totalAttendance += avg;
 
 
-      /* ================= FIND LECTURER ================= */
+      /* FIND LECTURER */
 
-      let lecturerName = "Not Assigned";
+      let lecturerName =
+        "Not Assigned";
 
-      const lecturerSnap =
+      const assignSnap =
         await db.collection("lecturer_assignments")
           .where("courseId", "==", courseId)
           .where("branch", "==", branch)
@@ -3171,27 +3211,25 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
           .get();
 
 
-      if (!lecturerSnap.empty) {
+      if (!assignSnap.empty) {
 
-        for (const lecDoc of lecturerSnap.docs) {
+        for (const a of assignSnap.docs) {
 
-          const lecData =
-            lecDoc.data();
-
-          const lecYear =
-            String(lecData.year);
-
-          const lecSem =
-            String(lecData.semester);
+          const lec =
+            a.data();
 
           if (
-            lecYear === year &&
-            lecSem === semester
+
+            String(lec.year) === String(year)
+
+            &&
+
+            String(lec.semester) === String(semester)
+
           ) {
 
             lecturerName =
-              lecData.lecturerName ||
-              "Not Assigned";
+              lec.lecturerName || "Not Assigned";
 
             break;
 
@@ -3202,75 +3240,71 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
       }
 
 
-      /* ================= DEFAULTERS ================= */
+      /* DEFAULTERS */
 
-      const lowStudents =
-        data.lowAttendanceStudents || [];
+      (data.lowAttendanceStudents || [])
+        .forEach(s => {
 
-      lowStudents.forEach(s => {
+          if (s.percent < 75) {
 
-        if (s.percent < 75) {
+            defaulters.push({
 
-          defaulters.push({
+              name: s.name,
 
-            name:
-              s.name || "Student",
+              percent: s.percent,
 
-            percent:
-              s.percent || 0,
+              course,
 
-            course,
+              branch,
 
-            branch,
+              year,
 
-            year,
+              semester,
 
-            semester,
+              academicYear,
 
-            academicYear
+              lecturerName
 
-          });
+            });
 
-        }
+          }
 
-      });
+        });
 
 
-      /* ================= TOPPERS ================= */
+      /* TOPPERS */
 
-      const highStudents =
-        data.highAttendanceStudents || [];
+      (data.highAttendanceStudents || [])
+        .forEach(s => {
 
-      highStudents.forEach(s => {
+          if (s.percent >= 90) {
 
-        if (s.percent >= 90) {
+            toppers.push({
 
-          toppers.push({
+              name: s.name,
 
-            name:
-              s.name || "Student",
+              percent: s.percent,
 
-            percent:
-              s.percent || 0,
+              course,
 
-            course,
+              branch,
 
-            branch,
+              year,
 
-            year,
+              semester,
 
-            semester,
+              academicYear,
 
-            academicYear
+              lecturerName
 
-          });
+            });
 
-        }
+          }
 
-      });
+        });
 
 
-      /* ================= CLASS OBJECT ================= */
+      /* CLASS */
 
       classes.push({
 
@@ -3293,16 +3327,12 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
     }
 
 
-    /* ================= OVERALL ================= */
-
     const overallAttendance =
       classes.length === 0
         ? 0
         : totalAttendance /
           classes.length;
 
-
-    /* ================= RESPONSE ================= */
 
     res.json({
 
@@ -3329,10 +3359,7 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
 
   catch (err) {
 
-    console.error(
-      "ADMIN ANALYTICS ERROR:",
-      err
-    );
+    console.error(err);
 
     res.status(500).json({
 
