@@ -3059,7 +3059,7 @@ app.get("/lecturer/class-report", async (req, res) => {
 ========================= */
 
 /* =========================
-   ADMIN ANALYTICS (TYPE SAFE)
+   ADMIN ANALYTICS (COMPLETE)
 ========================= */
 
 app.get("/admin/analytics", verifyAdmin, async (req, res) => {
@@ -3073,7 +3073,7 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
       req.query.academicYear || "";
 
 
-    /* USER COUNT */
+    /* USERS COUNT */
 
     const usersSnap =
       await db.collection("users").get();
@@ -3097,54 +3097,54 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
     });
 
 
-    /* ANALYTICS */
+    /* CLASS ANALYTICS */
 
     const analyticsSnap =
       await db.collection("class_analytics").get();
 
     const classes = [];
-
     const defaulters = [];
-
     const toppers = [];
+
+    const lecturerMap = {};
 
     let totalAttendance = 0;
 
 
     for (const doc of analyticsSnap.docs) {
 
-      const data = doc.data();
+      const d = doc.data();
 
       const classId = doc.id;
 
 
-      /* GET DETAILS */
+      /* BASIC DETAILS */
 
       let course =
-        data.course || "Unknown";
+        d.course || "Unknown";
 
       let courseId =
-        data.courseId || "";
+        d.courseId || "";
 
 
       let branch =
-        data.branch || "";
+        d.branch || "";
 
       let year =
-        data.year != null
-          ? String(data.year)
+        d.year != null
+          ? String(d.year)
           : "";
 
       let semester =
-        data.semester != null
-          ? String(data.semester)
+        d.semester != null
+          ? String(d.semester)
           : "";
 
       let academicYear =
-        data.academicYear || "";
+        d.academicYear || "";
 
 
-      /* FIX MISSING DATA using classId */
+      /* FIX missing branch/year/sem using classId */
 
       if (
         (!branch || !year || !semester)
@@ -3156,7 +3156,6 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
           classId.split("_");
 
         /*
-        format:
         ML11_CSE_3_1_2025-2026
         */
 
@@ -3179,7 +3178,7 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
 
 
       const avg =
-        data.classAverageAttendance || 0;
+        d.classAverageAttendance || 0;
 
 
       /* FILTER */
@@ -3203,6 +3202,8 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
       let lecturerName =
         "Not Assigned";
 
+      let lecturerUid = "";
+
       const assignSnap =
         await db.collection("lecturer_assignments")
           .where("courseId", "==", courseId)
@@ -3215,8 +3216,7 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
 
         for (const a of assignSnap.docs) {
 
-          const lec =
-            a.data();
+          const lec = a.data();
 
           if (
 
@@ -3231,6 +3231,9 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
             lecturerName =
               lec.lecturerName || "Not Assigned";
 
+            lecturerUid =
+              lec.lecturerUid;
+
             break;
 
           }
@@ -3240,9 +3243,34 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
       }
 
 
+      /* LECTURER PERFORMANCE */
+
+      if (lecturerUid) {
+
+        if (!lecturerMap[lecturerUid]) {
+
+          lecturerMap[lecturerUid] = {
+
+            lecturerName,
+
+            totalAvg: 0,
+
+            count: 0
+
+          };
+
+        }
+
+        lecturerMap[lecturerUid].totalAvg += avg;
+
+        lecturerMap[lecturerUid].count++;
+
+      }
+
+
       /* DEFAULTERS */
 
-      (data.lowAttendanceStudents || [])
+      (d.lowAttendanceStudents || [])
         .forEach(s => {
 
           if (s.percent < 75) {
@@ -3274,7 +3302,7 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
 
       /* TOPPERS */
 
-      (data.highAttendanceStudents || [])
+      (d.highAttendanceStudents || [])
         .forEach(s => {
 
           if (s.percent >= 90) {
@@ -3327,12 +3355,39 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
     }
 
 
+    /* LECTURER GRAPH DATA */
+
+    const lecturerPerformance =
+      Object.values(lecturerMap)
+        .map(l => ({
+
+          lecturerName:
+            l.lecturerName,
+
+          avgAttendance:
+            l.count === 0
+              ? 0
+              : (
+                  l.totalAvg /
+                  l.count
+                ).toFixed(1),
+
+          totalClasses:
+            l.count
+
+        }));
+
+
+    /* OVERALL */
+
     const overallAttendance =
       classes.length === 0
         ? 0
         : totalAttendance /
           classes.length;
 
+
+    /* RESPONSE */
 
     res.json({
 
@@ -3351,7 +3406,9 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
 
       defaulters,
 
-      toppers
+      toppers,
+
+      lecturerPerformance
 
     });
 
