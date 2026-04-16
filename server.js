@@ -1482,7 +1482,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage, intent))) return;
+      if (!(await requireStudent(res, role, userMessage, intent))) return;
 
       const snap = await db
         .collection("attendance_summary")
@@ -1545,7 +1545,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage, intent))) return;
+      if (!(await requireStudent(res, role, userMessage, intent))) return;
 
       const parameters = req.body.queryResult.parameters || {};
       const courseInput = parameters.course || "";
@@ -1621,7 +1621,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage, intent))) return;
+      if (!(await requireStudent(res, role, userMessage, intent))) return;
 
       const snap = await db
         .collection("attendance_summary")
@@ -1664,7 +1664,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage, intent))) return;
+      if (!(await requireStudent(res, role, userMessage, intent))) return;
 
       const snap = await db
         .collection("attendance_summary")
@@ -1706,7 +1706,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage, intent))) return;
+      if (!(await requireStudent(res, role, userMessage, intent))) return;
 
       const userDoc = await db.collection("users").doc(uid).get();
       const data = userDoc.data();
@@ -1730,7 +1730,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage, intent))) return;
+      if (!(await requireStudent(res, role, userMessage, intent))) return;
 
       const snap = await db
         .collection("attendance_summary")
@@ -1769,7 +1769,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage, intent))) return;
+      if (!(await requireStudent(res, role, userMessage, intent))) return;
 
       const snap = await db
         .collection("enrollment_requests")
@@ -1817,7 +1817,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage, intent))) return;
+      if (!(await requireStudent(res, role, userMessage, intent))) return;
       try {
 
         const userQuery = req.body.queryResult.queryText.toLowerCase();
@@ -1918,7 +1918,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage, intent))) return;
+      if (!(await requireStudent(res, role, userMessage, intent))) return;
 
       try {
 
@@ -1994,7 +1994,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage, intent))) return;
+      if (!(await requireStudent(res, role, userMessage, intent))) return;
 
       try {
 
