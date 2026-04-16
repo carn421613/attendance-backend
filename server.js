@@ -7,7 +7,7 @@ const cors = require("cors");
 const multer = require("multer");
 const cloudinary = require("./cloudinary");
 const path = require("path");
-const app=express()
+const app = express()
 
 
 app.use(cors({
@@ -424,7 +424,7 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
 
     }
 
-    catch(err){
+    catch (err) {
 
       console.log("Encoding error:", err);
 
@@ -1346,11 +1346,15 @@ function sendReplies(res, messages) {
    ROLE CHECKERS
 ========================= */
 
-function requireStudent(res, role) {
+
+async function requireStudent(res, role, userMessage) {
 
   if (!role || role.toLowerCase() !== "student") {
 
-    sendReply(res, "Only students can access this feature.");
+    const aiReply = await askAI(userMessage);
+
+    sendReplies(res, [aiReply]);
+
     return false;
 
   }
@@ -1358,12 +1362,15 @@ function requireStudent(res, role) {
   return true;
 
 }
-
-function requireLecturer(res, role) {
+async function requireLecturer(res, role, userMessage) {
 
   if (!role || role.toLowerCase() !== "lecturer") {
 
-    sendReply(res, "Only lecturers can access this feature.");
+    // send to AI instead of blocking
+    const aiReply = await askAI(userMessage);
+
+    sendReplies(res, [aiReply]);
+
     return false;
 
   }
@@ -1437,7 +1444,9 @@ app.post("/chatbot", async (req, res) => {
 
     if (intent === "Attendance_summary") {
 
-      if (!requireStudent(res, role)) return;
+      const userMessage = req.body.queryResult.queryText;
+
+      if (!(await requireLecturer(res, role, userMessage))) return;
 
       const snap = await db
         .collection("attendance_summary")
@@ -1498,81 +1507,85 @@ app.post("/chatbot", async (req, res) => {
 
     if (intent === "Attendance_course") {
 
-  if (!requireStudent(res, role)) return;
+      const userMessage = req.body.queryResult.queryText;
 
-  const parameters = req.body.queryResult.parameters || {};
-  const courseInput = parameters.course || "";
+      if (!(await requireLecturer(res, role, userMessage))) return;
 
-  const course = await getCourseIdFromAlias(courseInput);
+      const parameters = req.body.queryResult.parameters || {};
+      const courseInput = parameters.course || "";
 
-  if (!course)
-    return sendReplies(res, ["I couldn't recognize that course."]);
+      const course = await getCourseIdFromAlias(courseInput);
 
-  const courseId = course.id;
-  const courseName = course.name;
+      if (!course)
+        return sendReplies(res, ["I couldn't recognize that course."]);
 
-  // 🔥 STEP 1: Find student's class
-  const classesSnap = await db.collection("student_courses").get();
+      const courseId = course.id;
+      const courseName = course.name;
 
-  let classIdFound = null;
+      // 🔥 STEP 1: Find student's class
+      const classesSnap = await db.collection("student_courses").get();
 
-  for (const doc of classesSnap.docs) {
-    const classId = doc.id;
+      let classIdFound = null;
 
-    // match courseId (AI132)
-    if (!classId.startsWith(courseId)) continue;
+      for (const doc of classesSnap.docs) {
+        const classId = doc.id;
 
-    // check if student exists inside
-    const studentDoc = await db
-      .collection("student_courses")
-      .doc(classId)
-      .collection("students")
-      .doc(uid)
-      .get();
+        // match courseId (AI132)
+        if (!classId.startsWith(courseId)) continue;
 
-    if (studentDoc.exists) {
-      classIdFound = classId;
-      break;
+        // check if student exists inside
+        const studentDoc = await db
+          .collection("student_courses")
+          .doc(classId)
+          .collection("students")
+          .doc(uid)
+          .get();
+
+        if (studentDoc.exists) {
+          classIdFound = classId;
+          break;
+        }
+      }
+
+      if (!classIdFound)
+        return sendReplies(res, [`You are not enrolled in ${courseName}`]);
+
+      // 🔥 STEP 2: Get attendance
+      const doc = await db
+        .collection("attendance_summary")
+        .doc(uid)
+        .collection("courses")
+        .doc(classIdFound)
+        .get();
+
+      if (!doc.exists)
+        return sendReplies(res, ["No attendance records found yet."]);
+
+      const data = doc.data();
+
+      const total = data.totalClasses || 0;
+      const attended = data.attended || 0;
+      const missed = total - attended;
+
+      const percent =
+        total === 0 ? 0 : ((attended / total) * 100).toFixed(1);
+
+      return sendReplies(res, [
+        `📘 ${courseName}`,
+        `Total Classes : ${total}`,
+        `Attended : ${attended}`,
+        `Missed : ${missed}`,
+        `Attendance : ${percent}%`
+      ]);
     }
-  }
-
-  if (!classIdFound)
-    return sendReplies(res, [`You are not enrolled in ${courseName}`]);
-
-  // 🔥 STEP 2: Get attendance
-  const doc = await db
-    .collection("attendance_summary")
-    .doc(uid)
-    .collection("courses")
-    .doc(classIdFound)
-    .get();
-
-  if (!doc.exists)
-    return sendReplies(res, ["No attendance records found yet."]);
-
-  const data = doc.data();
-
-  const total = data.totalClasses || 0;
-  const attended = data.attended || 0;
-  const missed = total - attended;
-
-  const percent =
-    total === 0 ? 0 : ((attended / total) * 100).toFixed(1);
-
-  return sendReplies(res, [
-    `📘 ${courseName}`,
-    `Total Classes : ${total}`,
-    `Attended : ${attended}`,
-    `Missed : ${missed}`,
-    `Attendance : ${percent}%`
-  ]);
-}
 
     /* ATTENDANCE WARNING */
 
     if (intent === "Attendance_Warning") {
 
-      if (!requireStudent(res, role)) return;
+      const userMessage = req.body.queryResult.queryText;
+
+      if (!(await requireLecturer(res, role, userMessage))) return;
 
       const snap = await db
         .collection("attendance_summary")
@@ -1613,7 +1626,9 @@ app.post("/chatbot", async (req, res) => {
 
     if (intent === "missed_classes") {
 
-      if (!requireStudent(res, role)) return;
+      const userMessage = req.body.queryResult.queryText;
+
+      if (!(await requireLecturer(res, role, userMessage))) return;
 
       const snap = await db
         .collection("attendance_summary")
@@ -1653,7 +1668,9 @@ app.post("/chatbot", async (req, res) => {
 
     if (intent === "Courses_Enrolled") {
 
-      if (!requireStudent(res, role)) return;
+      const userMessage = req.body.queryResult.queryText;
+
+      if (!(await requireLecturer(res, role, userMessage))) return;
 
       const userDoc = await db.collection("users").doc(uid).get();
       const data = userDoc.data();
@@ -1675,7 +1692,9 @@ app.post("/chatbot", async (req, res) => {
 
     if (intent === "Remaining_Bunk") {
 
-      if (!requireStudent(res, role)) return;
+      const userMessage = req.body.queryResult.queryText;
+
+      if (!(await requireLecturer(res, role, userMessage))) return;
 
       const snap = await db
         .collection("attendance_summary")
@@ -1712,7 +1731,9 @@ app.post("/chatbot", async (req, res) => {
 
     if (intent === "Enrollment_Status") {
 
-      if (!requireStudent(res, role)) return;
+      const userMessage = req.body.queryResult.queryText;
+
+      if (!(await requireLecturer(res, role, userMessage))) return;
 
       const snap = await db
         .collection("enrollment_requests")
@@ -1758,8 +1779,9 @@ app.post("/chatbot", async (req, res) => {
 
       console.log("lowest_highest_attendance intent triggered");
 
-      if (!requireStudent(res, role)) return;
+      const userMessage = req.body.queryResult.queryText;
 
+      if (!(await requireLecturer(res, role, userMessage))) return;
       try {
 
         const userQuery = req.body.queryResult.queryText.toLowerCase();
@@ -1858,7 +1880,9 @@ app.post("/chatbot", async (req, res) => {
 
       console.log("Attendance_Prediction intent triggered");
 
-      if (!requireStudent(res, role)) return;
+      const userMessage = req.body.queryResult.queryText;
+
+      if (!(await requireLecturer(res, role, userMessage))) return;
 
       try {
 
@@ -1932,7 +1956,9 @@ app.post("/chatbot", async (req, res) => {
 
       console.log("Smart_Attendance_Advisor intent triggered");
 
-      if (!requireStudent(res, role)) return;
+      const userMessage = req.body.queryResult.queryText;
+
+      if (!(await requireLecturer(res, role, userMessage))) return;
 
       try {
 
@@ -2024,8 +2050,8 @@ app.post("/chatbot", async (req, res) => {
     if (intent === "Lecturer_Courses") {
 
       console.log("Lecturer_Courses intent triggered");
-
-      if (!requireLecturer(res, role)) return;
+      const userMessage = req.body.queryResult.queryText;
+      if (!(await requireLecturer(res, role, userMessage))) return;
 
       try {
 
@@ -2095,8 +2121,8 @@ app.post("/chatbot", async (req, res) => {
     if (intent === "Total_Enrolled_Students") {
 
       console.log("Lecturer_Total_Strength intent triggered");
-
-      if (!requireLecturer(res, role)) return;
+      const userMessage = req.body.queryResult.queryText;
+      if (!(await requireLecturer(res, role, userMessage))) return;
 
       try {
 
@@ -2177,8 +2203,9 @@ app.post("/chatbot", async (req, res) => {
     if (intent === "Lecturer_Course_Strength") {
 
       console.log("Lecturer_Course_Strength intent triggered");
+      const userMessage = req.body.queryResult.queryText;
+      if (!(await requireLecturer(res, role, userMessage))) return;
 
-      if (!requireLecturer(res, role)) return;
 
       try {
 
@@ -2276,8 +2303,8 @@ app.post("/chatbot", async (req, res) => {
     if (intent === "Lecturer_Low_Attendance") {
 
       console.log("Lecturer_Low_Attendance triggered");
-
-      if (!requireLecturer(res, role)) return;
+      const userMessage = req.body.queryResult.queryText;
+      if (!(await requireLecturer(res, role, userMessage))) return;
 
       try {
 
@@ -2335,8 +2362,8 @@ app.post("/chatbot", async (req, res) => {
     if (intent === "Lecturer_High_Attendance") {
 
       console.log("Lecturer_High_Attendance triggered");
-
-      if (!requireLecturer(res, role)) return;
+      const userMessage = req.body.queryResult.queryText;
+      if (!(await requireLecturer(res, role, userMessage))) return;
 
       try {
 
@@ -2393,8 +2420,8 @@ app.post("/chatbot", async (req, res) => {
     if (intent === "Lecturer_Class_Average") {
 
       console.log("Lecturer_Class_Average triggered");
-
-      if (!requireLecturer(res, role)) return;
+      const userMessage = req.body.queryResult.queryText;
+      if (!(await requireLecturer(res, role, userMessage))) return;
 
       try {
 
@@ -2446,8 +2473,8 @@ app.post("/chatbot", async (req, res) => {
     if (intent === "Lecturer_Total_Sessions") {
 
       console.log("Lecturer_Total_Sessions triggered");
-
-      if (!requireLecturer(res, role)) return;
+      const userMessage = req.body.queryResult.queryText;
+      if (!(await requireLecturer(res, role, userMessage))) return;
 
       try {
 
@@ -2500,8 +2527,8 @@ app.post("/chatbot", async (req, res) => {
     if (intent === "Lecturer_Highest_Attendance_Class") {
 
       console.log("Lecturer_Highest_Attendance_Class triggered");
-
-      if (!requireLecturer(res, role)) return;
+      const userMessage = req.body.queryResult.queryText;
+      if (!(await requireLecturer(res, role, userMessage))) return;
 
       try {
 
@@ -2566,8 +2593,8 @@ app.post("/chatbot", async (req, res) => {
     if (intent === "Lecturer_Lowest_Attendance_Class") {
 
       console.log("Lecturer_Lowest_Attendance_Class triggered");
-
-      if (!requireLecturer(res, role)) return;
+      const userMessage = req.body.queryResult.queryText;
+      if (!(await requireLecturer(res, role, userMessage))) return;
 
       try {
 
@@ -2632,8 +2659,8 @@ app.post("/chatbot", async (req, res) => {
     if (intent === "Lecturer_Class_Strength_Ranking") {
 
       console.log("Lecturer_Class_Strength_Ranking triggered");
-
-      if (!requireLecturer(res, role)) return;
+      const userMessage = req.body.queryResult.queryText;
+      if (!(await requireLecturer(res, role, userMessage))) return;
 
       try {
 
@@ -2786,7 +2813,7 @@ app.get("/student/analytics/:uid", async (req, res) => {
     // 4️⃣ Overall attendance
     const overallAttendance =
       totalSessions === 0 ? 0 :
-      (totalAttended / totalSessions) * 100;
+        (totalAttended / totalSessions) * 100;
 
     res.json({
       courses,
@@ -2872,8 +2899,8 @@ app.get("/lecturer/analytics/:uid", async (req, res) => {
 
       const analyticsDoc =
         await db.collection("class_analytics")
-        .doc(classId)
-        .get();
+          .doc(classId)
+          .get();
 
 
       if (analyticsDoc.exists) {
@@ -2893,9 +2920,9 @@ app.get("/lecturer/analytics/:uid", async (req, res) => {
 
         const studentsSnap =
           await db.collection("student_courses")
-          .doc(classId)
-          .collection("students")
-          .get();
+            .doc(classId)
+            .collection("students")
+            .get();
 
         totalStudents = studentsSnap.size;
 
@@ -2942,7 +2969,7 @@ app.get("/lecturer/analytics/:uid", async (req, res) => {
       totalClassesTaught === 0
         ? 0
         : sumAverageAttendance /
-          totalClassesTaught;
+        totalClassesTaught;
 
 
     res.json({
@@ -3429,9 +3456,9 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
             l.count === 0
               ? 0
               : (
-                  l.totalAvg /
-                  l.count
-                ).toFixed(1),
+                l.totalAvg /
+                l.count
+              ).toFixed(1),
 
           totalClasses:
             l.count
@@ -3445,7 +3472,7 @@ app.get("/admin/analytics", verifyAdmin, async (req, res) => {
       classes.length === 0
         ? 0
         : totalAttendance /
-          classes.length;
+        classes.length;
 
 
     /* RESPONSE */
