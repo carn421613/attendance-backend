@@ -1347,36 +1347,72 @@ function sendReplies(res, messages) {
 ========================= */
 
 
-async function requireStudent(res, role, userMessage) {
+async function requireLecturer(res, role, userMessage, intent) {
 
-  if (!role || role.toLowerCase() !== "student") {
-
-    const aiReply = await askAI(userMessage);
-
-    sendReplies(res, [aiReply]);
-
-    return false;
-
+  if (role?.toLowerCase() === "lecturer") {
+    return true;
   }
 
-  return true;
+  const lecturerIntents = [
+    "Lecturer_Courses",
+    "Lecturer_Class_Average",
+    "Lecturer_Low_Attendance",
+    "Lecturer_High_Attendance",
+    "Lecturer_Total_Sessions",
+    "Lecturer_Course_Strength",
+    "Total_Enrolled_Students",
+    "Lecturer_Class_Strength_Ranking",
+    "Lecturer_Highest_Attendance_Class",
+    "Lecturer_Lowest_Attendance_Class"
+  ];
 
+  if (lecturerIntents.includes(intent)) {
+
+    sendReplies(res, ["This feature is only available for lecturers."]);
+
+    return false;
+  }
+
+  // fallback to AI
+  const aiReply = await askAI(userMessage);
+
+  sendReplies(res, [aiReply]);
+
+  return false;
 }
-async function requireLecturer(res, role, userMessage) {
+async function requireStudent(res, role, userMessage, intent) {
 
-  if (!role || role.toLowerCase() !== "lecturer") {
-
-    // send to AI instead of blocking
-    const aiReply = await askAI(userMessage);
-
-    sendReplies(res, [aiReply]);
-
-    return false;
-
+  if (role?.toLowerCase() === "student") {
+    return true;
   }
 
-  return true;
+  // allow AI fallback ONLY if intent is not student-specific
+  const studentIntents = [
+    "Attendance_summary",
+    "Attendance_course",
+    "Attendance_Warning",
+    "Remaining_Bunk",
+    "Smart_Attendance_Advisor",
+    "Attendance_Prediction",
+    "lowest_highest_attendance",
+    "missed_classes",
+    "Enrollment_Status",
+    "Courses_Enrolled"
+  ];
 
+  if (studentIntents.includes(intent)) {
+
+    sendReplies(res, ["This feature is only available for students."]);
+
+    return false;
+  }
+
+  // fallback to AI
+  const aiReply = await askAI(userMessage);
+
+  sendReplies(res, [aiReply]);
+
+  return false;
 }
 function sendReply(res, messages) {
 
@@ -1446,7 +1482,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
 
       const snap = await db
         .collection("attendance_summary")
@@ -1509,7 +1545,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
 
       const parameters = req.body.queryResult.parameters || {};
       const courseInput = parameters.course || "";
@@ -1585,7 +1621,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
 
       const snap = await db
         .collection("attendance_summary")
@@ -1628,7 +1664,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
 
       const snap = await db
         .collection("attendance_summary")
@@ -1670,7 +1706,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
 
       const userDoc = await db.collection("users").doc(uid).get();
       const data = userDoc.data();
@@ -1694,7 +1730,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
 
       const snap = await db
         .collection("attendance_summary")
@@ -1733,7 +1769,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
 
       const snap = await db
         .collection("enrollment_requests")
@@ -1781,7 +1817,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
       try {
 
         const userQuery = req.body.queryResult.queryText.toLowerCase();
@@ -1882,7 +1918,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
 
       try {
 
@@ -1958,7 +1994,7 @@ app.post("/chatbot", async (req, res) => {
 
       const userMessage = req.body.queryResult.queryText;
 
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
 
       try {
 
@@ -2051,7 +2087,7 @@ app.post("/chatbot", async (req, res) => {
 
       console.log("Lecturer_Courses intent triggered");
       const userMessage = req.body.queryResult.queryText;
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
 
       try {
 
@@ -2122,7 +2158,7 @@ app.post("/chatbot", async (req, res) => {
 
       console.log("Lecturer_Total_Strength intent triggered");
       const userMessage = req.body.queryResult.queryText;
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
 
       try {
 
@@ -2204,7 +2240,7 @@ app.post("/chatbot", async (req, res) => {
 
       console.log("Lecturer_Course_Strength intent triggered");
       const userMessage = req.body.queryResult.queryText;
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
 
 
       try {
@@ -2304,7 +2340,7 @@ app.post("/chatbot", async (req, res) => {
 
       console.log("Lecturer_Low_Attendance triggered");
       const userMessage = req.body.queryResult.queryText;
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
 
       try {
 
@@ -2363,7 +2399,7 @@ app.post("/chatbot", async (req, res) => {
 
       console.log("Lecturer_High_Attendance triggered");
       const userMessage = req.body.queryResult.queryText;
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
 
       try {
 
@@ -2421,7 +2457,7 @@ app.post("/chatbot", async (req, res) => {
 
       console.log("Lecturer_Class_Average triggered");
       const userMessage = req.body.queryResult.queryText;
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
 
       try {
 
@@ -2474,7 +2510,7 @@ app.post("/chatbot", async (req, res) => {
 
       console.log("Lecturer_Total_Sessions triggered");
       const userMessage = req.body.queryResult.queryText;
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
 
       try {
 
@@ -2528,7 +2564,7 @@ app.post("/chatbot", async (req, res) => {
 
       console.log("Lecturer_Highest_Attendance_Class triggered");
       const userMessage = req.body.queryResult.queryText;
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
 
       try {
 
@@ -2594,7 +2630,7 @@ app.post("/chatbot", async (req, res) => {
 
       console.log("Lecturer_Lowest_Attendance_Class triggered");
       const userMessage = req.body.queryResult.queryText;
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
 
       try {
 
@@ -2660,7 +2696,7 @@ app.post("/chatbot", async (req, res) => {
 
       console.log("Lecturer_Class_Strength_Ranking triggered");
       const userMessage = req.body.queryResult.queryText;
-      if (!(await requireLecturer(res, role, userMessage))) return;
+      if (!(await requireLecturer(res, role, userMessage, intent))) return;
 
       try {
 
