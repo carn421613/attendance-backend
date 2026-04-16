@@ -1475,15 +1475,7 @@ app.post("/chatbot", async (req, res) => {
       ]);
     }
 
-    if (intent === "General_AI_Query") {
 
-  const userMessage = req.body.queryResult.queryText;
-
-  const aiReply = await askAI(userMessage);
-
-  return sendReplies(res, [aiReply]);
-
-}
     /* ATTENDANCE SUMMARY */
 
     if (intent === "Attendance_summary") {
@@ -2072,6 +2064,15 @@ app.post("/chatbot", async (req, res) => {
         ]);
 
       }
+
+    }
+    if (intent === "General_AI_Query") {
+
+      const userMessage = req.body.queryResult.queryText;
+
+      const aiReply = await askAI(userMessage);
+
+      return sendReplies(res, [aiReply]);
 
     }
     /* AI FALLBACK */
