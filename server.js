@@ -104,7 +104,7 @@ console.log("SERVER STARTING...");
 let serviceAccount;
 
 if (process.env.FIREBASE_SERVICE_ACCOUNT_B64) {
-  // Render
+  // Render (base64 encoded)
   serviceAccount = JSON.parse(
     Buffer.from(
       process.env.FIREBASE_SERVICE_ACCOUNT_B64,
@@ -112,7 +112,7 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT_B64) {
     ).toString("utf8")
   );
 } else {
-  // Local
+  // Use local serviceAccountKey.json file
   serviceAccount = require("./serviceAccountKey.json");
 }
 
@@ -394,9 +394,10 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
 
     try {
 
-      console.log("Sending images to DeepFace:", photos);
+      
+      console.log("Face Service URL:", process.env.FACE_SERVICE_URL);
 
-      await fetch(
+      const faceResponse = await fetch(
 
         `${process.env.FACE_SERVICE_URL}/register-face`,
 
@@ -420,13 +421,19 @@ app.post("/approve-enrollment/:id", verifyAdmin, async (req, res) => {
 
       );
 
-      console.log("Encoding created for", studentUid);
+      const faceData = await faceResponse.json();
+
+      if (!faceResponse.ok) {
+        console.error("Face service error:", faceData);
+      } else {
+        console.log("✅ Encoding created for", studentUid, faceData);
+      }
 
     }
 
     catch (err) {
 
-      console.log("Encoding error:", err);
+      console.error("❌ Encoding error:", err.message);
 
     }
 
@@ -927,7 +934,8 @@ app.post("/upload-class-photo", upload.array("photo", 5), async (req, res) => {
        CALL PYTHON SERVICE
     ========================= */
 
-    fetch(
+    console.log("Calling face service for attendance mark:", `${process.env.FACE_SERVICE_URL}/mark-attendance`);
+    const faceResponse = await fetch(
 
       `${process.env.FACE_SERVICE_URL}/mark-attendance`,
 
@@ -967,12 +975,23 @@ app.post("/upload-class-photo", upload.array("photo", 5), async (req, res) => {
 
       }
 
-    ).catch(err => console.log("Face service error:", err));
+    );
+
+    const faceData = await faceResponse.text();
+    if (!faceResponse.ok) {
+      console.error("Face service failed:", faceResponse.status, faceData);
+      return res.status(502).json({
+        error: "Face service mark-attendance failed",
+        details: faceData
+      });
+    }
+    console.log("Face service response:", faceData);
 
 
     /* =========================
        RESPONSE
-    ========================= */
+    =========================
+    */
 
     res.json({
 
@@ -1341,6 +1360,8 @@ function sendReplies(res, messages) {
   });
 
 }
+
+
 
 /* =========================
    ROLE CHECKERS
